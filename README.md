@@ -1,81 +1,92 @@
 # evtechallenge
 Stealth Company Technical Challenge
 
-# Viewing Elasticsearch Logs in Grafana
-
-This guide shows how to run the project and view your application logs in Grafana.
+This project includes a Go application with comprehensive monitoring and observability using Prometheus for metrics and Elasticsearch for structured logging, all visualized through automatically provisioned Grafana dashboards.
 
 ## Quick Start
 
 ### 1. Start the Infrastructure
 ```bash
-# Start Elasticsearch and Grafana
-docker-compose up -d
-
-# Verify services are running
-docker-compose ps
+# Start all services (Elasticsearch, Prometheus, Grafana)
+docker-compose up
 ```
 
 Wait about 30 seconds for Elasticsearch to fully start up.
 
-### 2. Run Your Application
-```bash
-# Run your Go application (this will send logs to Elasticsearch)
-go run main.go
-```
 
-Your application will now send structured logs to both:
-- **Console** (pretty formatted)
-- **Elasticsearch** (ECS JSON format)
+Your application will now send:
+- **Structured logs** to Elasticsearch (ECS JSON format)
+- **Metrics** to Prometheus via `/metrics` endpoint
+- **Console logs** (pretty formatted)
 
-### 3. Access Grafana
+### 2. Access Grafana
 1. Open your browser to **http://localhost:3000**
 2. Login with:
    - **Username**: `admin`
    - **Password**: `admin`
 3. Skip password change (click "Skip")
 
-### 4. Configure Elasticsearch Data Source
+## Pre-configured Dashboards
 
-#### Add Data Source:
-1. Click the **⚙️ gear icon** (Configuration) in the left sidebar
-2. Click **Data Sources**
-3. Click **Add data source**
-4. Select **Elasticsearch**
+### 3 Go Application Metrics Dashboard
+**Automatically available** - No setup required!
 
-#### Configure Settings:
-- **URL**: `http://elasticsearch:9200`
-- **Index name**: `logs*`
-- **Time field name**: `@timestamp`
-- Leave other settings as default
+This dashboard shows real-time metrics from your Go application:
+- **HTTP Request Rate** - Requests per second over time
+- **Request Duration** - 95th and 50th percentile response times
+- **Active Connections** - Current HTTP connections
+- **Business Logic Metrics** - AllGood endpoint request rates
+- **Status Code Distribution** - HTTP response codes breakdown
+- **Endpoint Performance** - Request rates by endpoint
 
-#### Save:
-1. Click **Save & test**
-2. You should see a green "Data source is working" message
+### 4 Application Logs Dashboard
+**Automatically available** - No setup required!
 
-### 5. View Your Logs
+This dashboard displays your application logs:
+- **Live Log Stream** - Real-time log entries
+- **Log Volume** - Log count over time
+- **Log Levels** - Distribution of log levels (INFO, WARN, ERROR)
 
-#### Create a Dashboard:
-1. Click the **+** icon in the left sidebar
-2. Click **Dashboard**
-3. Click **Add visualization**
-4. Select your **Elasticsearch** data source
+## Data Sources
 
-#### Configure the Panel:
-1. In the **Query** section:
-   - Leave query as `*` (shows all logs)
-   - Set **Time field** to `@timestamp`
-2. In the **Panel options**:
-   - Change **Visualization type** to **Logs**
-3. Set time range to **Last 15 minutes** (top right corner)
+Both data sources are **automatically configured**:
 
-#### View Results:
-Your application logs should now appear in the panel! You can:
-- **Search logs**: Use the query box to filter (e.g., `message:hello`)
-- **View JSON**: Click on any log entry to see the full ECS structured data
-- **Time filter**: Adjust the time range as needed
+- **Prometheus** - Metrics collection from your Go app
+- **Elasticsearch** - Structured logging with ECS format
+
+## Testing the System
+
+### 5 Generate Metrics
+```bash
+# Test the hello endpoint
+curl http://localhost:8080/hello
+
+# Test the all-good endpoint (success case)
+curl -X POST http://localhost:8080/all-good \
+  -H "Content-Type: application/json" \
+  -d '{"yes": true}'
+
+# Test the all-good endpoint (validation failure)
+curl -X POST http://localhost:8080/all-good \
+  -H "Content-Type: application/json" \
+  -d '{"yes": false}'
+```
+
+### 6 View Raw Data
+- **Prometheus metrics**: http://localhost:9090
+- **Elasticsearch logs**: `curl "http://localhost:9200/logs*/_search?pretty"`
 
 ## Troubleshooting
+
+### No dashboards appearing?
+1. Check if Grafana is running: `docker-compose ps`
+2. Verify data sources are working in Grafana → Configuration → Data Sources
+3. Ensure your app is generating logs and metrics
+
+### No metrics data?
+1. Verify your app is running and accessible at `http://localhost:8080`
+2. Check Prometheus targets: http://localhost:9090/targets
+3. Ensure the `/metrics` endpoint is accessible: `curl http://localhost:8080/metrics`
 
 ### No logs appearing?
 1. Check if your app is running and producing logs
@@ -84,11 +95,6 @@ Your application logs should now appear in the panel! You can:
    curl "http://localhost:9200/logs*/_search?pretty"
    ```
 3. Check the time range in Grafana (try "Last 1 hour")
-
-### Elasticsearch connection failed?
-1. Make sure Elasticsearch is running: `docker-compose ps`
-2. Wait a bit longer - Elasticsearch takes time to start
-3. Use `http://elasticsearch:9200` as the URL (not localhost)
 
 ### Starting fresh?
 To completely reset everything:
@@ -99,5 +105,45 @@ docker-compose up -d
 
 ## URLs Reference
 - **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
 - **Elasticsearch**: http://localhost:9200
-- **Check logs directly**: `curl "http://localhost:9200/logs*/_search?pretty"`
+- **Your App**: http://localhost:8080
+
+## Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Go App       │    │   Prometheus    │    │   Grafana       │
+│   :8080        │───▶│   :9090         │───▶│   :3000         │
+│   (metrics)    │    │   (scraping)    │    │   (visualize)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Console       │    │   Metrics       │    │   Dashboards    │
+│   (logs)        │    │   (storage)     │    │   (auto-provisioned)│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Elasticsearch │
+│   :9200         │
+│   (logs)        │
+└─────────────────┘
+```
+
+## Metrics Collected
+
+### HTTP Metrics
+- `http_requests_total` - Total HTTP requests by method, endpoint, and status
+- `http_request_duration_seconds` - Request duration histogram
+- `http_active_connections` - Current active connections
+
+### Business Logic Metrics
+- `allgood_requests_total` - AllGood endpoint requests by result (success, validation_failed, invalid_json, method_not_allowed)
+
+### Go Runtime Metrics (Automatic)
+- Memory usage, goroutines, GC stats
+- Process metrics (CPU, file descriptors)
+- Go-specific metrics (heap, stack, etc.)
