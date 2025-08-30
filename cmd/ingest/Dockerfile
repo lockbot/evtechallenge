@@ -1,0 +1,17 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o ingest ./cmd/ingest
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+
+COPY --from=builder /app/ingest .
+EXPOSE $INGEST_PORT
+
+CMD ["./ingest"]

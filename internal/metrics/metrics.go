@@ -1,16 +1,30 @@
 package metrics
 
 import (
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// HTTP metrics are now managed by the MetricsManager singleton
+// These variables are kept for backward compatibility but will be nil if metrics are disabled
 var (
+	HTTPRequestsTotal     *prometheus.CounterVec
+	HTTPRequestDuration   *prometheus.HistogramVec
+	HTTPActiveConnections prometheus.Gauge
+	AllGoodRequestsTotal  *prometheus.CounterVec
+)
+
+// initializeHTTPMetrics initializes HTTP metrics if they haven't been initialized yet
+func initializeHTTPMetrics() {
+	if HTTPRequestsTotal != nil {
+		return // Already initialized
+	}
+
 	// HTTP request counter
-	HTTPRequestsTotal = promauto.NewCounterVec(
+	HTTPRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Total number of HTTP requests",
@@ -19,7 +33,7 @@ var (
 	)
 
 	// HTTP request duration histogram
-	HTTPRequestDuration = promauto.NewHistogramVec(
+	HTTPRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "http_request_duration_seconds",
 			Help:    "Duration of HTTP requests in seconds",
@@ -29,7 +43,7 @@ var (
 	)
 
 	// Active HTTP connections gauge
-	HTTPActiveConnections = promauto.NewGauge(
+	HTTPActiveConnections = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "http_active_connections",
 			Help: "Number of active HTTP connections",
@@ -37,17 +51,34 @@ var (
 	)
 
 	// Business logic metrics
-	AllGoodRequestsTotal = promauto.NewCounterVec(
+	AllGoodRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "allgood_requests_total",
 			Help: "Total number of all-good requests",
 		},
 		[]string{"result"}, // "success", "validation_failed", "invalid_json"
 	)
-)
+
+	// Register with the singleton registry
+	mm := GetInstance()
+	mm.registry.MustRegister(
+		HTTPRequestsTotal,
+		HTTPRequestDuration,
+		HTTPActiveConnections,
+		AllGoodRequestsTotal,
+	)
+}
 
 // RecordHTTPRequest records metrics for an HTTP request
 func RecordHTTPRequest(method, endpoint string, statusCode int, duration time.Duration) {
+	// Check if business metrics are enabled
+	if os.Getenv("ENABLE_BUSINESS_METRICS") != "true" {
+		return
+	}
+
+	// Initialize metrics if needed
+	initializeHTTPMetrics()
+
 	status := strconv.Itoa(statusCode)
 
 	HTTPRequestsTotal.WithLabelValues(method, endpoint, status).Inc()
@@ -56,15 +87,39 @@ func RecordHTTPRequest(method, endpoint string, statusCode int, duration time.Du
 
 // RecordAllGoodRequest records business logic metrics
 func RecordAllGoodRequest(result string) {
+	// Check if business metrics are enabled
+	if os.Getenv("ENABLE_BUSINESS_METRICS") != "true" {
+		return
+	}
+
+	// Initialize metrics if needed
+	initializeHTTPMetrics()
+
 	AllGoodRequestsTotal.WithLabelValues(result).Inc()
 }
 
 // IncActiveConnections increments active connections
 func IncActiveConnections() {
+	// Check if business metrics are enabled
+	if os.Getenv("ENABLE_BUSINESS_METRICS") != "true" {
+		return
+	}
+
+	// Initialize metrics if needed
+	initializeHTTPMetrics()
+
 	HTTPActiveConnections.Inc()
 }
 
 // DecActiveConnections decrements active connections
 func DecActiveConnections() {
+	// Check if business metrics are enabled
+	if os.Getenv("ENABLE_BUSINESS_METRICS") != "true" {
+		return
+	}
+
+	// Initialize metrics if needed
+	initializeHTTPMetrics()
+
 	HTTPActiveConnections.Dec()
 }

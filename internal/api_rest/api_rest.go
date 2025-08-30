@@ -1,4 +1,4 @@
-package http_rest
+package api_rest
 
 import (
 	"encoding/json"
@@ -104,7 +104,7 @@ func allGoodHandler(w http.ResponseWriter, r *http.Request) {
 func SetupRoutes() *mux.Router {
 	r := mux.NewRouter()
 
-	// Add metrics middleware to all routes
+	// Always add metrics middleware - it will handle its own environment checks
 	r.Use(metrics.MetricsMiddleware)
 
 	// Routes
@@ -112,7 +112,7 @@ func SetupRoutes() *mux.Router {
 	r.HandleFunc("/hello", helloHandler).Methods("GET")
 	r.HandleFunc("/all-good", allGoodHandler).Methods("POST")
 
-	// Prometheus metrics endpoint
+	// Always add metrics endpoint - it will handle its own environment checks
 	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
 	return r

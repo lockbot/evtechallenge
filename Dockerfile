@@ -1,15 +1,22 @@
-FROM golang:1.25.0-alpine3.22
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
-
 COPY go.mod go.sum ./
-
-RUN go mod download && go mod verify
+RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o orch .
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o ingest ./cmd/ingest
 
-RUN go build -o evtechallenge-orch main.go
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
 
-EXPOSE 8080
+COPY --from=builder /app/orch .
+COPY --from=builder /app/api ./api
+COPY --from=builder /app/ingest ./ingest
 
-CMD ["./evtechallenge-orch"]
+EXPOSE $API_PORT $INGEST_PORT $ORCHESTRATOR_PORT
+
+CMD ["./orch"]

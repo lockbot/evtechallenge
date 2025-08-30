@@ -11,9 +11,27 @@ scrape_configs:
   #   static_configs:
   #     - targets: ['localhost:9090']
   
-  - job_name: 'evtechallenge-orch'
+  - job_name: 'evtechallenge-api'
     static_configs:
-      - targets: ['evtechallenge-orch:8080']
+      - targets: ['evtechallenge-api:${API_PORT}']
     metrics_path: '/metrics'
     scrape_interval: 10s
+  
+  - job_name: 'evtechallenge-ingest'
+    static_configs:
+      - targets: ['evtechallenge-ingest:${INGEST_PORT}']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'evtechallenge-orch'
+    static_configs:
+      - targets: ['evtechallenge-orch:${ORCHESTRATOR_PORT}']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+  
+  - job_name: 'evtechallenge-db'
+    static_configs:
+      - targets: ['evtechallenge-db:9123']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
   

@@ -1,15 +1,84 @@
 version: '3.8'
 
 services:
-  # Future Orchestrator
+  # Couchbase Database
+  evtechallenge-db:
+    image: couchbase:community-7.6.2
+    container_name: evtechallenge-db
+    ports:
+      - "8091-8097:8091-8097"  # Client-to-node ports
+      - "9123:9123"            # Prometheus metrics port
+    environment:
+      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+    volumes:
+      - couchbase_data:/opt/couchbase/var
+    networks:
+      - evtechallenge_network
+
+  # Couchbase Setup Service (runs once to create bucket and user)
+  evtechallenge-db-setup:
+    image: couchbase:community-7.6.2
+    container_name: evtechallenge-db-setup
+    depends_on:
+      - evtechallenge-db
+    environment:
+      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+    command: >
+      sh -c "
+        echo 'Waiting for Couchbase to be ready...' &&
+        until curl -s http://evtechallenge-db:8091 > /dev/null; do
+          echo 'Waiting for Couchbase...' &&
+          sleep 5
+        done &&
+        echo 'Couchbase is ready!' &&
+        echo 'Creating evtechallenge bucket...' &&
+        curl -u Administrator:password \
+             -d name=evtechallenge \
+             -d ramQuotaMB=100 \
+             -d authType=sasl \
+             -d saslPassword= \
+             -d bucketType=couchbase \
+             http://evtechallenge-db:8091/pools/default/buckets &&
+        echo 'Waiting for bucket to be ready...' &&
+        sleep 10 &&
+        echo 'Creating application user...' &&
+        curl -u Administrator:password \
+             -d name=evtechallenge_user \
+             -d password=password \
+             -d roles=bucket_admin[evtechallenge] \
+             http://evtechallenge-db:8091/settings/rbac/users/local/evtechallenge_user &&
+        echo 'Couchbase setup complete!' &&
+        echo 'Bucket: evtechallenge' &&
+        echo 'User: evtechallenge_user' &&
+        echo 'Password: password'
+      "
+    networks:
+      - evtechallenge_network
+    restart: "no"
+
+  # Future Orchestrator (will launch ingest and API)
   evtechallenge-orch:
     build: .
     container_name: evtechallenge-orch
     ports:
-      - "8080:8080"
+      - "${ORCHESTRATOR_PORT}:${ORCHESTRATOR_PORT}"
+      - "${API_PORT}:${API_PORT}"
+      - "${INGEST_PORT}:${INGEST_PORT}"
     depends_on:
       - elasticsearch
       - prometheus
+      - evtechallenge-db-setup
+    environment:
+      - COUCHBASE_URL=${COUCHBASE_URL}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD}
+      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH}
+      - ENABLE_PROMETHEUS=${ENABLE_PROMETHEUS}
+      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
     networks:
       - evtechallenge_network
 
@@ -28,6 +97,8 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - evtechallenge_network
+    profiles:
+      - elasticsearch
 
   # Prometheus for metrics
   prometheus:
@@ -39,6 +110,8 @@ services:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - evtechallenge_network
+    profiles:
+      - prometheus
   
   # Grafana for visualization
   grafana:
@@ -55,11 +128,15 @@ services:
       - prometheus
     networks:
       - evtechallenge_network
+    profiles:
+      - prometheus
+      - elasticsearch
 
 volumes:
   elasticsearch_data:
   prometheus_data:
   grafana_data:
+  couchbase_data:
 
 networks:
   evtechallenge_network:

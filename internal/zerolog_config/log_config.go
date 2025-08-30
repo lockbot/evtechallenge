@@ -48,7 +48,8 @@ func (clw ConsoleLevelWriter) Write(p []byte) (n int, err error) {
 func StartupWithEnv(elasticsearchURL string, subAddress string) {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
-	if elasticsearchURL == "" {
+	// Check if Elasticsearch is enabled
+	if os.Getenv("ENABLE_ELASTICSEARCH") != "true" || elasticsearchURL == "" {
 		// Fallback to console only
 		log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 		return
