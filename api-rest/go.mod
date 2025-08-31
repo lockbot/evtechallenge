@@ -1,9 +1,11 @@
-module stealthcompany.com/evtechallenge
+module stealthcompany.com/api
 
 go 1.25.0
 
 require (
 	github.com/gorilla/mux v1.8.1
+	github.com/joho/godotenv v1.5.1
+	github.com/prometheus/client_golang v1.23.0
 	github.com/rs/zerolog v1.34.0
 	go.elastic.co/ecszerolog v0.2.0
 )
@@ -15,7 +17,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.23.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect

@@ -1,4 +1,4 @@
-package http_rest
+package api
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/evtechallenge/internal/metrics" // Update with your actual module name
+	"stealthcompany.com/api/internal/metrics" // Update with your actual module name
 )
 
 // AllGoodRequest represents the expected JSON payload

@@ -1,0 +1,17 @@
+services:
+  mock:
+    build:
+      context: ./fhir-client
+      dockerfile: ./cmd/index-query-couchbase/Dockerfile
+    container_name: evtechallenge-mock
+    environment:
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
+    networks:
+      - evtechallenge_network
+
+networks:
+  evtechallenge_network:
+    driver: bridge
+

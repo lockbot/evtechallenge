@@ -1,21 +1,133 @@
-version: '3.8'
-
 services:
-  # Future Orchestrator
-  evtechallenge-orch:
-    build: .
-    container_name: evtechallenge-orch
+  # Couchbase Database
+  evtechallenge-db:
+    image: couchbase:community-7.6.2
+    container_name: evtechallenge-db
     ports:
-      - "8080:8080"
-    depends_on:
-      - elasticsearch
-      - prometheus
+      - "8091-8097:8091-8097"  # Client-to-node ports
+      - "9123:9123"            # Prometheus metrics port
+    environment:
+      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+      - COUCHBASE_HOSTNAME=evtechallenge-db
+    volumes:
+      - couchbase_data:/opt/couchbase/var
     networks:
       - evtechallenge_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Couchbase Setup Service (runs once to create bucket and user)
+  evtechallenge-db-setup:
+    image: couchbase:community-7.6.2
+    container_name: evtechallenge-db-setup
+    depends_on:
+      evtechallenge-db:
+        condition: service_healthy
+    environment:
+      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+    command: |
+      sh -c '
+        set -e
+        echo "Waiting for Couchbase UI..."
+        attempts=0; max=40
+        until curl -sf http://evtechallenge-db:8091/pools > /dev/null; do
+          attempts=$$((attempts+1))
+          if [ $$attempts -ge $$max ]; then echo "ERROR: Couchbase UI not ready"; exit 1; fi
+          echo "Waiting for Couchbase... ($$attempts/$$max)"
+          sleep 3
+        done
+        echo "Couchbase is ready!"
+
+        # Resolve DB container IP for advertised hostname (no awk)
+        DB_IP=$$(getent hosts evtechallenge-db | head -n1 | cut -d" " -f1 || true)
+        if [ -z "$$DB_IP" ]; then DB_IP=$$(getent ahostsv4 evtechallenge-db | head -n1 | cut -d" " -f1 || true); fi
+        if [ -z "$$DB_IP" ]; then echo "ERROR: Unable to resolve DB IP"; exit 1; fi
+        echo "Using node IP: $$DB_IP"
+
+        echo "Running node-init..."
+        /opt/couchbase/bin/couchbase-cli node-init -c evtechallenge-db --node-init-hostname "$$DB_IP" -u Administrator -p password
+
+        echo "Initializing cluster (data,index,query)..."
+        /opt/couchbase/bin/couchbase-cli cluster-init -c evtechallenge-db \
+          --cluster-username Administrator --cluster-password password \
+          --services data,index,query --cluster-ramsize 512 \
+          --cluster-index-ramsize 256 --index-storage-setting default
+
+        echo "Creating bucket..."
+        /opt/couchbase/bin/couchbase-cli bucket-create -c evtechallenge-db -u Administrator -p password \
+          --bucket evtechallenge --bucket-type couchbase --bucket-ramsize 256 --wait
+
+        echo "Creating application user..."
+        /opt/couchbase/bin/couchbase-cli user-manage -c evtechallenge-db -u Administrator -p password \
+          --set --rbac-username evtechallenge_user --rbac-password password \
+          --roles bucket_full_access[evtechallenge] --auth-domain local
+      
+        echo "Couchbase setup complete!"
+      '
+    networks:
+      - evtechallenge_network
+    restart: "no"
+
+  # API REST Service
+  api:
+    build: 
+      context: ./api-rest
+      dockerfile: Dockerfile
+    container_name: evtechallenge-api
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    depends_on:
+      evtechallenge-db-setup:
+        condition: service_completed_successfully
+    environment:
+      - COUCHBASE_URL=${COUCHBASE_URL}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD}
+      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH}
+      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
+      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
+      - API_PORT=${API_PORT}
+    networks:
+      - evtechallenge_network
+    restart: unless-stopped
+
+  # FHIR Client Service
+  fhir:
+    build:
+      context: ./fhir-client
+      dockerfile: Dockerfile
+    container_name: evtechallenge-fhir
+    ports:
+      - "${FHIR_PORT}:${FHIR_PORT}"
+    depends_on:
+      evtechallenge-db-setup:
+        condition: service_completed_successfully
+    environment:
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD}
+      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH}
+      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
+      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
+      - FHIR_BASE_URL=${FHIR_BASE_URL}
+      - FHIR_TIMEOUT=${FHIR_TIMEOUT}
+      - FHIR_PORT=${FHIR_PORT}
+    networks:
+      - evtechallenge_network
+    restart: "no"
 
   # Elasticsearch for logs
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.1.2
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
@@ -28,21 +140,33 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - evtechallenge_network
+    profiles:
+      - observability
 
   # Prometheus for metrics
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v2.54.1
     container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
     networks:
       - evtechallenge_network
+    profiles:
+      - observability
   
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:12.1
+    image: grafana/grafana:11.2.0
     container_name: grafana
     ports:
       - "3000:3000"
@@ -50,16 +174,17 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning
-    depends_on:
-      - elasticsearch
-      - prometheus
+      - grafana_data:/var/lib/grafana
     networks:
       - evtechallenge_network
+    profiles:
+      - observability
 
 volumes:
   elasticsearch_data:
   prometheus_data:
   grafana_data:
+  couchbase_data:
 
 networks:
   evtechallenge_network:
