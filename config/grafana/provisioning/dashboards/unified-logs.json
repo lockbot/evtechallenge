@@ -254,9 +254,9 @@
   "refresh": "10s",
   "schemaVersion": 41,
   "tags": [
-    "go",
     "logs",
-    "elasticsearch"
+    "elasticsearch",
+    "unified"
   ],
   "templating": {
     "list": []
@@ -267,7 +267,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Go Application Logs",
-  "uid": "go-logs",
+  "title": "Unified Logs Dashboard",
+  "uid": "unified-logs",
   "version": 1
 }

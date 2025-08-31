@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
+	"stealthcompany.com/fhir/internal/metrics"
 )
 
 // FHIRBundle represents a FHIR bundle response
@@ -104,15 +106,25 @@ func (c *Client) fetchFHIRBundle(ctx context.Context, url string) ([]FHIRResourc
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
+	fetchStart := time.Now()
 	resp, err := c.httpClient.Do(req)
+	fetchDuration := time.Since(fetchStart)
+
 	if err != nil {
+		metrics.RecordHTTPFetch("bundle_fetch", "error")
+		metrics.RecordHTTPFetchDuration("bundle_fetch", fetchDuration)
 		return nil, fmt.Errorf("failed to fetch FHIR bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.RecordHTTPFetch("bundle_fetch", "error")
+		metrics.RecordHTTPFetchDuration("bundle_fetch", fetchDuration)
 		return nil, fmt.Errorf("FHIR API returned status %d", resp.StatusCode)
 	}
+
+	metrics.RecordHTTPFetch("bundle_fetch", "success")
+	metrics.RecordHTTPFetchDuration("bundle_fetch", fetchDuration)
 
 	var bundle FHIRBundle
 	if err := json.NewDecoder(resp.Body).Decode(&bundle); err != nil {
@@ -157,10 +169,18 @@ func (c *Client) ingestEncounter(ctx context.Context, resource FHIRResource) err
 	}
 
 	// Upsert the encounter
+	start := time.Now()
 	_, err := c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
+	duration := time.Since(start)
+
 	if err != nil {
+		metrics.RecordCouchbaseOperation("upsert", "error")
+		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert encounter: %w", err)
 	}
+
+	metrics.RecordCouchbaseOperation("upsert", "success")
+	metrics.RecordCouchbaseOperationDuration("upsert", duration)
 
 	// Extract and sync related resources
 	// use already computed refs
@@ -189,10 +209,18 @@ func (c *Client) ingestPractitioner(ctx context.Context, resource FHIRResource) 
 	resource.Data["resourceType"] = "Practitioner"
 
 	// Upsert the practitioner
+	start := time.Now()
 	_, err := c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
+	duration := time.Since(start)
+
 	if err != nil {
+		metrics.RecordCouchbaseOperation("upsert", "error")
+		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert practitioner: %w", err)
 	}
+
+	metrics.RecordCouchbaseOperation("upsert", "success")
+	metrics.RecordCouchbaseOperationDuration("upsert", duration)
 
 	return nil
 }
@@ -204,10 +232,18 @@ func (c *Client) ingestPatient(ctx context.Context, resource FHIRResource) error
 	resource.Data["resourceType"] = "Patient"
 
 	// Upsert the patient
+	start := time.Now()
 	_, err := c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
+	duration := time.Since(start)
+
 	if err != nil {
+		metrics.RecordCouchbaseOperation("upsert", "error")
+		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert patient: %w", err)
 	}
+
+	metrics.RecordCouchbaseOperation("upsert", "success")
+	metrics.RecordCouchbaseOperationDuration("upsert", duration)
 
 	return nil
 }
@@ -218,11 +254,19 @@ func (c *Client) syncPatient(ctx context.Context, patientRef string) error {
 	docID := fmt.Sprintf("Patient/%s", patientRef)
 
 	// Try to get existing patient
+	start := time.Now()
 	_, err := c.bucket.DefaultCollection().Get(docID, nil)
+	duration := time.Since(start)
+
 	if err == nil {
 		// Patient already exists, no need to sync
+		metrics.RecordCouchbaseOperation("get", "success")
+		metrics.RecordCouchbaseOperationDuration("get", duration)
 		return nil
 	}
+
+	metrics.RecordCouchbaseOperation("get", "miss")
+	metrics.RecordCouchbaseOperationDuration("get", duration)
 
 	// Patient doesn't exist, fetch from FHIR API
 	url := fmt.Sprintf("%s/Patient/%s", c.fhirBaseURL, patientRef)
@@ -231,15 +275,31 @@ func (c *Client) syncPatient(ctx context.Context, patientRef string) error {
 		return fmt.Errorf("failed to create patient request: %w", err)
 	}
 
+	fetchStart := time.Now()
 	resp, err := c.httpClient.Do(req)
+	fetchDuration := time.Since(fetchStart)
+
 	if err != nil {
+		metrics.RecordFHIRAPICall("Patient", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
 		return fmt.Errorf("failed to fetch patient: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.RecordFHIRAPICall("Patient", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
 		return fmt.Errorf("FHIR API returned status %d for patient", resp.StatusCode)
 	}
+
+	metrics.RecordFHIRAPICall("Patient", "success")
+	metrics.RecordHTTPFetch("resource_fetch", "success")
+	metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+	metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
 
 	var patientData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&patientData); err != nil {
@@ -249,10 +309,19 @@ func (c *Client) syncPatient(ctx context.Context, patientRef string) error {
 	// Upsert the patient (denormalize fields)
 	patientData["docId"] = docID
 	patientData["resourceType"] = "Patient"
+
+	start = time.Now()
 	_, err = c.bucket.DefaultCollection().Upsert(docID, patientData, nil)
+	duration = time.Since(start)
+
 	if err != nil {
+		metrics.RecordCouchbaseOperation("upsert", "error")
+		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert patient: %w", err)
 	}
+
+	metrics.RecordCouchbaseOperation("upsert", "success")
+	metrics.RecordCouchbaseOperationDuration("upsert", duration)
 
 	return nil
 }
@@ -263,11 +332,19 @@ func (c *Client) syncPractitioner(ctx context.Context, practitionerRef string) e
 	docID := fmt.Sprintf("Practitioner/%s", practitionerRef)
 
 	// Try to get existing practitioner
+	start := time.Now()
 	_, err := c.bucket.DefaultCollection().Get(docID, nil)
+	duration := time.Since(start)
+
 	if err == nil {
 		// Practitioner already exists, no need to sync
+		metrics.RecordCouchbaseOperation("get", "success")
+		metrics.RecordCouchbaseOperationDuration("get", duration)
 		return nil
 	}
+
+	metrics.RecordCouchbaseOperation("get", "miss")
+	metrics.RecordCouchbaseOperationDuration("get", duration)
 
 	// Practitioner doesn't exist, fetch from FHIR API
 	url := fmt.Sprintf("%s/Practitioner/%s", c.fhirBaseURL, practitionerRef)
@@ -276,15 +353,31 @@ func (c *Client) syncPractitioner(ctx context.Context, practitionerRef string) e
 		return fmt.Errorf("failed to create practitioner request: %w", err)
 	}
 
+	fetchStart := time.Now()
 	resp, err := c.httpClient.Do(req)
+	fetchDuration := time.Since(fetchStart)
+
 	if err != nil {
+		metrics.RecordFHIRAPICall("Practitioner", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
 		return fmt.Errorf("failed to fetch practitioner: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.RecordFHIRAPICall("Practitioner", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
 		return fmt.Errorf("FHIR API returned status %d for practitioner", resp.StatusCode)
 	}
+
+	metrics.RecordFHIRAPICall("Practitioner", "success")
+	metrics.RecordHTTPFetch("resource_fetch", "success")
+	metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+	metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
 
 	var practitionerData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&practitionerData); err != nil {
@@ -294,10 +387,19 @@ func (c *Client) syncPractitioner(ctx context.Context, practitionerRef string) e
 	// Upsert the practitioner (denormalize fields)
 	practitionerData["docId"] = docID
 	practitionerData["resourceType"] = "Practitioner"
+
+	start = time.Now()
 	_, err = c.bucket.DefaultCollection().Upsert(docID, practitionerData, nil)
+	duration = time.Since(start)
+
 	if err != nil {
+		metrics.RecordCouchbaseOperation("upsert", "error")
+		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert practitioner: %w", err)
 	}
+
+	metrics.RecordCouchbaseOperation("upsert", "success")
+	metrics.RecordCouchbaseOperationDuration("upsert", duration)
 
 	return nil
 }

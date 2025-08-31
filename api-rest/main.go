@@ -7,6 +7,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/api/internal/api"            // Update with your actual module name
+	"stealthcompany.com/api/internal/metrics"        // Update with your actual module name
 	"stealthcompany.com/api/internal/zerolog_config" // Update with your actual module name
 )
 
@@ -30,6 +31,9 @@ func main() {
 	zerolog_config.StartupWithEnv(elasticsearchURL, elasticsearchIndex)
 
 	log.Info().Msg("Starting evtechallenge-api service")
+
+	// Start system metrics collection
+	metrics.StartSystemMetricsCollection("api-rest")
 
 	// Setup routes
 	router := api.SetupRoutes()

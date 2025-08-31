@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"runtime"
 	"strconv"
 	"time"
 
@@ -44,6 +45,30 @@ var (
 		},
 		[]string{"result"}, // "success", "validation_failed", "invalid_json"
 	)
+
+	GoMemstatsAllocBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "api_go_memstats_alloc_bytes",
+			Help: "Number of bytes allocated and still in use in API service",
+		},
+		[]string{"service"},
+	)
+
+	GoMemstatsSysBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "api_go_memstats_sys_bytes",
+			Help: "Number of bytes obtained from system in API service",
+		},
+		[]string{"service"},
+	)
+
+	GoThreads = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "api_go_threads",
+			Help: "Number of OS threads created in API service",
+		},
+		[]string{"service"},
+	)
 )
 
 // RecordHTTPRequest records metrics for an HTTP request
@@ -67,4 +92,26 @@ func IncActiveConnections() {
 // DecActiveConnections decrements active connections
 func DecActiveConnections() {
 	HTTPActiveConnections.Dec()
+}
+
+// UpdateSystemMetrics updates Go runtime metrics with service label
+func UpdateSystemMetrics(serviceName string) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	GoMemstatsAllocBytes.WithLabelValues(serviceName).Set(float64(m.Alloc))
+	GoMemstatsSysBytes.WithLabelValues(serviceName).Set(float64(m.Sys))
+	GoThreads.WithLabelValues(serviceName).Set(float64(runtime.GOMAXPROCS(0)))
+}
+
+// StartSystemMetricsCollection starts a goroutine to collect system metrics
+func StartSystemMetricsCollection(serviceName string) {
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			UpdateSystemMetrics(serviceName)
+		}
+	}()
 }

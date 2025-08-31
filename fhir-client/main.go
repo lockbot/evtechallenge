@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/fhir/internal/fhir"
+	"stealthcompany.com/fhir/internal/metrics"
 	"stealthcompany.com/fhir/internal/zerolog_config"
 )
 
@@ -26,11 +29,36 @@ func main() {
 	// Get configuration from environment
 	elasticsearchURL := getEnvOrDefault("ELASTICSEARCH_URL", "http://elasticsearch:9200")
 	elasticsearchIndex := getEnvOrDefault("ELASTICSEARCH_INDEX", "logs")
+	fhirPort := getEnvOrDefault("FHIR_PORT", "8081")
 
 	// Initialize zerolog with Elasticsearch
 	zerolog_config.StartupWithEnv(elasticsearchURL, elasticsearchIndex)
 
 	log.Info().Msg("Starting evtechallenge-fhir service")
+
+	// Start system metrics collection
+	metrics.StartSystemMetricsCollection("fhir-client")
+
+	// Start metrics HTTP server
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+
+		server := &http.Server{
+			Addr:    ":" + fhirPort,
+			Handler: mux,
+		}
+
+		log.Info().
+			Str("port", fhirPort).
+			Msg("Starting metrics server")
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error().
+				Err(err).
+				Msg("Metrics server failed")
+		}
+	}()
 
 	// Create FHIR client
 	fhirClient, err := fhir.NewClient()
