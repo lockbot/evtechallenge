@@ -1,0 +1,309 @@
+# EVT Challenge - Plataforma de Dados Clínicos
+
+[![en](https://img.shields.io/badge/lang-en-red.svg)](https://github.com/lockbot/evtechallenge/blob/main/README.md)
+[![pt-br](https://img.shields.io/badge/lang-pt--br-green.svg)](https://github.com/lockbot/evtechallenge/blob/main/README.pt-br.md)
+
+Uma plataforma de ingestão e API de dados clínicos multi-tenant construída com Go, apresentando ingestão de dados FHIR, persistência Couchbase e observabilidade abrangente.
+
+## Visão Geral da Arquitetura
+
+Esta plataforma consiste em **dois microsserviços** trabalhando juntos para fornecer uma solução completa de dados clínicos:
+
+### Serviços
+- **FHIR Client** (`fhir-client/`): Ingere recursos FHIR de API pública para o Couchbase
+- **API REST** (`api-rest/`): API REST multi-tenant para acesso a dados e gerenciamento de revisões
+
+### Infraestrutura
+- **Couchbase**: Banco de dados de documentos multi-tenant com suporte N1QL
+- **Elasticsearch**: Logs centralizados com logs JSON estruturados
+- **Prometheus**: Coleta de métricas e monitoramento
+- **Grafana**: Visualização e dashboards
+
+## Início Rápido
+
+### Stack Completa (Recomendado)
+Inicie a plataforma completa com observabilidade:
+```bash
+docker-compose --profile observability up
+```
+
+### Serviços Individuais
+
+#### Iniciar Apenas o Banco de Dados
+```bash
+docker-compose up -d evtechallenge-db evtechallenge-db-setup
+```
+
+#### Iniciar Apenas o FHIR Client
+```bash
+docker-compose up -d fhir
+```
+
+#### Iniciar Apenas a API REST
+```bash
+docker-compose up -d api
+```
+
+### Gerenciamento de Serviços
+
+#### Parar Serviços Individuais
+```bash
+# Parar apenas o cliente FHIR
+docker-compose stop fhir
+
+# Parar apenas a API
+docker-compose stop api
+
+# Parar apenas o banco de dados
+docker-compose stop evtechallenge-db
+```
+
+#### Limpeza Completa
+```bash
+# Parar todos os serviços e remover volumes (AVISO: DELETA O BANCO DE DADOS)
+docker-compose down -v
+
+# Parar todos os serviços mas preservar dados
+docker-compose down
+```
+
+## Configuração
+
+Crie um arquivo `.env` na raiz do repositório:
+
+```bash
+# Configuração do Couchbase
+COUCHBASE_URL=couchbase://evtechallenge-db
+COUCHBASE_USERNAME=evtechallenge_user
+COUCHBASE_PASSWORD=password
+COUCHBASE_BUCKET=evtechallenge
+
+# Configuração do FHIR Client
+FHIR_BASE_URL=https://hapi.fhir.org/baseR4
+FHIR_TIMEOUT=30s
+
+# Configuração da API
+API_PORT=8080
+
+# Configuração de Observabilidade
+ELASTICSEARCH_URL=http://elasticsearch:9200
+ELASTICSEARCH_INDEX=logs
+ENABLE_ELASTICSEARCH=true
+ENABLE_SYSTEM_METRICS=true
+ENABLE_BUSINESS_METRICS=true
+```
+
+## Decisões Técnicas
+
+### Decisões de Arquitetura
+
+#### **Separação de Microsserviços**
+**Decisão**: Separar ingestão (cliente FHIR) e API (serviço REST) em containers distintos.
+
+**Justificativa**:
+- **Escalabilidade Independente**: Pode escalar ingestão e API separadamente baseado na carga
+- **Isolamento de Falhas**: Falhas da API não afetam a ingestão de dados
+- **Flexibilidade de Deploy**: Pode fazer deploy de atualizações independentemente
+- **Otimização de Recursos**: Diferentes requisitos de recursos para cada serviço
+
+**Benefícios Futuros**:
+- Execução de ingestão agendada (diária/semanal) sem impacto na API
+- Múltiplas fontes de ingestão sem mudanças na API
+- API pode servir dados enquanto a ingestão está rodando
+
+#### **Couchbase como Banco de Dados Primário**
+**Decisão**: Usar Couchbase para persistência de dados ao invés de RDBMS tradicional.
+
+**Justificativa**:
+- **Flexibilidade de Schema**: Estrutura de dados FHIR varia e evolui
+- **Desenvolvimento Rápido**: Sem migrações de schema ou modelagem complexa
+- **Escalabilidade**: Escalabilidade horizontal com sharding automático
+- **Multi-Modelo**: Suporte a chave-valor, documento e consultas N1QL
+- **Performance**: Cache em memória com persistência em disco
+
+**Trade-offs**:
+- Menos conformidade ACID que bancos tradicionais
+- Curva de aprendizado para N1QL vs SQL
+- Complexidade operacional para gerenciamento de cluster
+
+#### **Design Multi-Tenant**
+**Decisão**: Implementar isolamento de tenant através de documentos de revisão separados.
+
+**Justificativa**:
+- **Isolamento Lógico**: Estado de revisão de cada tenant é completamente separado
+- **Dados Compartilhados**: Recursos FHIR são compartilhados (custo-efetivo)
+- **Escalabilidade**: Fácil adicionar novos tenants sem mudanças de schema
+- **Segurança**: Limites claros de dados entre tenants
+
+**Implementação**:
+- Identificação de tenant via header `X-Tenant-ID`
+- Documentos de revisão armazenados como `Review/{tenantID}`
+- Todos os endpoints da API requerem header de tenant
+
+### Decisões de Modelagem de Dados
+
+#### **Estrutura de Documento**
+**Decisão**: Desnormalizar relacionamentos para performance de consulta.
+
+**Documentos de Encontro**:
+```json
+{
+  "id": "encounter-123",
+  "resourceType": "Encounter",
+  "docId": "Encounter/encounter-123",
+  "subjectPatientId": "patient-456",
+  "practitionerIds": ["practitioner-789"],
+  "subject": { "reference": "Patient/patient-456" },
+  "participant": [...]
+}
+```
+
+**Benefícios**:
+- Consultas rápidas sem joins
+- Acesso direto a IDs relacionados
+- Mantém estrutura FHIR original
+- Suporta acesso tanto chave-valor quanto N1QL
+
+#### **Estratégia de Resolução de Referências**
+**Decisão**: Resolução automática de referências FHIR com tratamento gracioso de falhas.
+
+**Referências Válidas**: `Patient/123`, `Practitioner/456`
+**Referências Ignoradas**: `urn:uuid:abc-123-def` (referências de bundle inline)
+
+**Benefícios**:
+- Relacionamentos de dados completos
+- Trata dados FHIR inconsistentes graciosamente
+- Distingue entre referências resolvíveis e não resolvíveis
+
+### Decisões de Observabilidade
+
+#### **Logging Estruturado**
+**Decisão**: Usar zerolog com formatação JSON e integração Elasticsearch.
+
+**Benefícios**:
+- Logs legíveis por máquina para análise
+- Sem exposição de PHI nos logs
+- Agregação de logs centralizada
+- Correlação entre serviços
+
+#### **Estratégia de Métricas**
+**Decisão**: Coleta abrangente de métricas com integração Prometheus.
+
+**Cobertura**:
+- Métricas de requisições HTTP (contagem, duração, status)
+- Métricas de lógica de negócio (requisições de revisão, falhas de validação)
+- Métricas de sistema (memória, threads, conexões)
+- Métricas de chamadas de API FHIR (taxas de sucesso/falha)
+
+## Monitoramento e Observabilidade
+
+### Dashboards Grafana
+Acesso em `http://localhost:3000`
+
+**Dashboards Disponíveis**:
+- **Métricas de Sistema**: Uso de memória, CPU, contagem de threads
+- **Performance da API**: Taxas de requisição, tempos de resposta, taxas de erro
+- **Ingestão FHIR**: Contagem de recursos, taxas de sucesso de chamadas de API
+- **Métricas de Negócio**: Requisições de revisão, atividade de tenant
+
+### Logs
+**Elasticsearch**: `http://localhost:9200`
+
+**Fontes de Log**:
+- **FHIR Client**: Progresso de ingestão, chamadas de API, erros
+- **API REST**: Requisição/resposta, atividade de tenant, erros
+- **Sistema**: Logs de container, eventos de inicialização/desligamento
+
+### Métricas
+**Prometheus**: `http://localhost:9090`
+
+**Métricas Principais**:
+- `http_requests_total`: Contagem de requisições por endpoint e status
+- `http_request_duration_seconds`: Histogramas de tempo de resposta
+- `fhir_api_calls_total`: Taxas de sucesso/falha de chamadas de API FHIR
+- `couchbase_operations_total`: Métricas de operações de banco de dados
+
+## Desenvolvimento
+
+### Estrutura do Projeto
+```
+evtechallenge/
+├── api-rest/           # Serviço de API REST multi-tenant
+├── fhir-client/        # Serviço de ingestão de dados FHIR
+├── config/             # Arquivos de configuração
+│   ├── grafana/        # Dashboards do Grafana
+│   └── prometheus/     # Configuração do Prometheus
+├── docker-compose.yml  # Orquestração de serviços
+└── README.md          # Este arquivo
+```
+
+### Arquivos Principais
+- `docker-compose.yml`: Definições de serviços e rede
+- `api-rest/internal/api/`: Implementação do serviço de API
+- `fhir-client/internal/fhir/`: Lógica de ingestão FHIR
+- `config/grafana/`: Dashboards pré-configurados
+- `config/prometheus/`: Configuração de coleta de métricas
+
+### Adicionando Novas Funcionalidades
+1. **Endpoints de API**: Adicionar em `api-rest/internal/api/handlers.go`
+2. **Modelos de Dados**: Definir em `api-rest/internal/api/types.go`
+3. **Operações de Banco**: Implementar em `api-rest/internal/api/database.go`
+4. **Lógica de Revisão**: Estender `api-rest/internal/api/review.go`
+
+## Solução de Problemas
+
+### Problemas Comuns
+
+#### Falhas de Conexão com Banco de Dados
+```bash
+# Verificar status do Couchbase
+docker-compose logs evtechallenge-db
+
+# Reiniciar banco de dados
+docker-compose restart evtechallenge-db
+```
+
+#### Serviço de API Indisponível
+```bash
+# Verificar logs da API
+docker-compose logs api
+
+# Verificar se o banco está pronto
+curl http://localhost:8080/hello -H "X-Tenant-ID: test"
+```
+
+#### Problemas de Ingestão FHIR
+```bash
+# Verificar logs do cliente FHIR
+docker-compose logs fhir
+
+# Verificar acesso à API externa
+curl https://hapi.fhir.org/baseR4/Patient?_count=1
+```
+
+### Verificações de Saúde
+- **Saúde da API**: `GET /` (requer header de tenant)
+- **Saúde do Banco**: Verificar UI web do Couchbase em `http://localhost:8091`
+- **Saúde das Métricas**: `GET /metrics`
+
+## Documentação
+
+- **API REST**: [api-rest/README.md](api-rest/README.md)
+- **FHIR Client**: [fhir-client/README.md](fhir-client/README.md)
+- **Docker Compose**: [docker-compose.yml](docker-compose.yml)
+- **ADR (Registros de Decisões Arquiteturais)**: [docs/README.md](docs/README.md)
+
+## Considerações de Segurança
+
+- **Isolamento multi-tenant** garante separação de dados
+- **Validação de entrada** em todos os endpoints da API
+- **Variáveis de ambiente** para configuração sensível
+- **Sem credenciais hardcoded** no código fonte
+
+## Melhorias Futuras
+
+- **Ingestão Agendada**: Atualização diária/semanal de dados
+- **Enriquecimento com IA**: Aprimoramento de dados com machine learning
+- **Analytics Avançados**: Capacidades de consulta complexa
+- **Trilhas de Auditoria**: Logging abrangente de acesso
+- **Limitação de Taxa de API**: Controles de uso baseados em tenant
