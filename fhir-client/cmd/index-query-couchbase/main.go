@@ -32,7 +32,8 @@ func main() {
 		panic(fmt.Errorf("connect cluster: %w", err))
 	}
 	bucket := cluster.Bucket("evtechallenge")
-	if err := bucket.WaitUntilReady(60*time.Second, &gocb.WaitUntilReadyOptions{Context: ctx, ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery}}); err != nil {
+	err = bucket.WaitUntilReady(60*time.Second, &gocb.WaitUntilReadyOptions{Context: ctx, ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery}})
+	if err != nil {
 		panic(fmt.Errorf("bucket not ready: %w", err))
 	}
 
