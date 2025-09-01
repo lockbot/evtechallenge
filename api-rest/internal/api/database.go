@@ -36,7 +36,8 @@ func InitCouchbase() error {
 		return fmt.Errorf("connect cluster: %w", err)
 	}
 	bucket := cluster.Bucket(cbBucketName)
-	if err := bucket.WaitUntilReady(30*time.Second, &gocb.WaitUntilReadyOptions{ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery}}); err != nil {
+	err = bucket.WaitUntilReady(30*time.Second, &gocb.WaitUntilReadyOptions{ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery}})
+	if err != nil {
 		return fmt.Errorf("bucket not ready: %w", err)
 	}
 	cbCluster = cluster

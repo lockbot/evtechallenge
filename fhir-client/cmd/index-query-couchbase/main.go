@@ -175,35 +175,58 @@ func contains(arr []string, v string) bool {
 
 func extractIDFromEncounter(enc map[string]interface{}, resourceType string) string {
 	// subject.reference: "Patient/<id>"
-	if resourceType == "Patient" {
-		if subj, ok := enc["subject"].(map[string]interface{}); ok {
-			if ref, ok := subj["reference"].(string); ok {
-				id := extractIDFromReference(ref, "Patient")
-				if id != "" {
-					return id
-				}
-			}
-		}
+	if resourceType != "Patient" {
+		return ""
 	}
+
+	subj, ok := enc["subject"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	ref, ok := subj["reference"].(string)
+	if !ok {
+		return ""
+	}
+
+	id := extractIDFromReference(ref, "Patient")
+	if id != "" {
+		return id
+	}
+
 	return ""
 }
 
 func extractPractitionerIDsFromEncounter(enc map[string]interface{}) []string {
 	var ids []string
-	if parts, ok := enc["participant"].([]interface{}); ok {
-		for _, p := range parts {
-			if pm, ok := p.(map[string]interface{}); ok {
-				if ind, ok := pm["individual"].(map[string]interface{}); ok {
-					if ref, ok := ind["reference"].(string); ok {
-						id := extractIDFromReference(ref, "Practitioner")
-						if id != "" {
-							ids = append(ids, id)
-						}
-					}
-				}
-			}
+
+	parts, ok := enc["participant"].([]interface{})
+	if !ok {
+		return ids
+	}
+
+	for _, p := range parts {
+		pm, ok := p.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		ind, ok := pm["individual"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		ref, ok := ind["reference"].(string)
+		if !ok {
+			continue
+		}
+
+		id := extractIDFromReference(ref, "Practitioner")
+		if id != "" {
+			ids = append(ids, id)
 		}
 	}
+
 	return ids
 }
 

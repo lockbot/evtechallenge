@@ -42,7 +42,8 @@ func main() {
 		Str("port", apiPort).
 		Msg("Server starting")
 
-	if err := http.ListenAndServe(":"+apiPort, router); err != nil {
+	err = http.ListenAndServe(":"+apiPort, router)
+	if err != nil {
 		log.Fatal().
 			Err(err).
 			Msg("Failed to start server")

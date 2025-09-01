@@ -15,7 +15,8 @@ func SetupRoutes() *mux.Router {
 	r.Use(metrics.MetricsMiddleware)
 
 	// Initialize Couchbase (non-fatal if fails; endpoints will report unavailable)
-	if err := InitCouchbase(); err != nil {
+	err := InitCouchbase()
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to initialize Couchbase; endpoints will be unavailable")
 	}
 

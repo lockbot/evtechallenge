@@ -32,26 +32,32 @@ func GetReviewInfo(tenantID, resourceType, resourceID string) ReviewInfo {
 	if err != nil {
 		return ReviewInfo{Reviewed: false}
 	}
-	if err := res.Content(&reviewDoc); err != nil {
+	err = res.Content(&reviewDoc)
+	if err != nil {
 		return ReviewInfo{Reviewed: false}
 	}
 	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
-	if reviewData, exists := reviewDoc.Reviews[entityKey]; exists {
-		if reviewMap, ok := reviewData.(map[string]interface{}); ok {
-			reviewTime := ""
-			if rt, ok := reviewMap["reviewTime"].(string); ok {
-				reviewTime = rt
-			}
-			return ReviewInfo{
-				Reviewed:   true,
-				ReviewTime: reviewTime,
-				EntityType: resourceType,
-				EntityID:   resourceID,
-			}
-		}
+	reviewData, exists := reviewDoc.Reviews[entityKey]
+	if !exists {
+		return ReviewInfo{Reviewed: false}
+	}
+
+	reviewMap, ok := reviewData.(map[string]interface{})
+	if !ok {
 		return ReviewInfo{Reviewed: true, EntityType: resourceType, EntityID: resourceID}
 	}
-	return ReviewInfo{Reviewed: false}
+
+	reviewTime := ""
+	if rt, ok := reviewMap["reviewTime"].(string); ok {
+		reviewTime = rt
+	}
+
+	return ReviewInfo{
+		Reviewed:   true,
+		ReviewTime: reviewTime,
+		EntityType: resourceType,
+		EntityID:   resourceID,
+	}
 }
 
 // CreateReviewRequest creates or updates a review for a resource
@@ -80,7 +86,8 @@ func CreateReviewRequest(tenantID, resourceType, resourceID string) error {
 			Updated:  time.Now().UTC(),
 		}
 	} else {
-		if err := res.Content(&reviewDoc); err != nil {
+		err = res.Content(&reviewDoc)
+		if err != nil {
 			return fmt.Errorf("failed to decode review document: %w", err)
 		}
 	}

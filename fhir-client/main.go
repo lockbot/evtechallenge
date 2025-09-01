@@ -81,7 +81,8 @@ func main() {
 	}()
 
 	// Run FHIR data ingestion
-	if err := fhirClient.IngestData(ctx); err != nil {
+	err = fhirClient.IngestData(ctx)
+	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to ingest FHIR data")
 	}
 

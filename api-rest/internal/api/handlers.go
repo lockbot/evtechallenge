@@ -75,7 +75,8 @@ func AllGoodHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req AllGoodRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		log.Error().
 			Err(err).
 			Str("tenant", tenantID).
@@ -153,7 +154,8 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			return
 		}
 		var doc map[string]interface{}
-		if err := res.Content(&doc); err != nil {
+		err = res.Content(&doc)
+		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "failed to decode document"})
 			return
@@ -194,7 +196,8 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		limitParam := r.URL.Query().Get("limit")
 		limit := 100
 		if limitParam != "" {
-			if v, err := strconv.Atoi(limitParam); err == nil && v > 0 && v <= 10000 {
+			v, err := strconv.Atoi(limitParam)
+			if err == nil && v > 0 && v <= 10000 {
 				limit = v
 			}
 		}
@@ -209,17 +212,20 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		var out []QueryRow
 		for rows.Next() {
 			var rr QueryRow
-			if err := rows.Row(&rr); err == nil {
-				// Check review status for each resource
-				reviewInfo := GetReviewInfo(tenantID, resourceType, rr.ID)
-				rr.Resource["reviewed"] = reviewInfo.Reviewed
-				if reviewInfo.Reviewed {
-					rr.Resource["reviewTime"] = reviewInfo.ReviewTime
-					rr.Resource["entityType"] = reviewInfo.EntityType
-					rr.Resource["entityID"] = reviewInfo.EntityID
-				}
-				out = append(out, rr)
+			err := rows.Row(&rr)
+			if err != nil {
+				continue
 			}
+
+			// Check review status for each resource
+			reviewInfo := GetReviewInfo(tenantID, resourceType, rr.ID)
+			rr.Resource["reviewed"] = reviewInfo.Reviewed
+			if reviewInfo.Reviewed {
+				rr.Resource["reviewTime"] = reviewInfo.ReviewTime
+				rr.Resource["entityType"] = reviewInfo.EntityType
+				rr.Resource["entityID"] = reviewInfo.EntityID
+			}
+			out = append(out, rr)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -249,7 +255,8 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ReviewRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -280,10 +287,11 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "resource not found") {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to save review"})
+			return
 		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to save review"})
 		return
 	}
 
