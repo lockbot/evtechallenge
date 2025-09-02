@@ -36,12 +36,12 @@ docker-compose up -d evtechallenge-db evtechallenge-db-setup
 
 #### Start Just FHIR Client
 ```bash
-docker-compose up -d fhir
+docker-compose up -d --no-deps fhir
 ```
 
 #### Start Just API REST
 ```bash
-docker-compose up -d api
+docker-compose up -d --no-deps api
 ```
 
 ### Service Management
@@ -177,27 +177,22 @@ ENABLE_BUSINESS_METRICS=true
 
 ### Observability Decisions
 
-#### **Structured Logging**
-**Decision**: Use zerolog with JSON formatting and Elasticsearch integration.
+#### **Structured Logging & Metrics**
+**Decision**: Use zerolog with JSON formatting and Elasticsearch integration, plus comprehensive Prometheus metrics.
 
 **Benefits**:
 - Machine-readable logs for analysis
-- Centralized log aggregation
-- Correlation across services
-
-#### **Metrics Strategy**
-**Decision**: Comprehensive metrics collection with Prometheus integration.
-
-**Coverage**:
-- HTTP request metrics (count, duration, status)
-- Business logic metrics (review requests, validation failures)
-- System metrics (memory, threads, connections)
-- FHIR API call metrics (success/failure rates)
+- Centralized log aggregation and correlation across services
+- Comprehensive metrics coverage (HTTP requests, business logic, system resources, FHIR API calls)
 
 ## Monitoring & Observability
 
 ### Grafana Dashboards
 Access at `http://localhost:3000`
+
+**Login Credentials**:
+- Username: `admin`
+- Password: `admin`
 
 **Available Dashboards**:
 - **System Metrics**: Memory usage, CPU, thread counts
@@ -205,22 +200,7 @@ Access at `http://localhost:3000`
 - **FHIR Ingestion**: Resource counts, API call success rates
 - **Business Metrics**: Review requests, tenant activity
 
-### Logs
-**Elasticsearch**: `http://localhost:9200`
-
-**Log Sources**:
-- **FHIR Client**: Ingestion progress, API calls, errors
-- **API REST**: Request/response, tenant activity, errors
-- **System**: Container logs, startup/shutdown events
-
-### Metrics
-**Prometheus**: `http://localhost:9090`
-
-**Key Metrics**:
-- `http_requests_total`: Request counts by endpoint and status
-- `http_request_duration_seconds`: Response time histograms
-- `fhir_api_calls_total`: FHIR API call success/failure rates
-- `couchbase_operations_total`: Database operation metrics
+**Note**: Logs are available through Elasticsearch integration within Grafana dashboards.
 
 ## Development
 
@@ -230,20 +210,21 @@ evtechallenge/
 ├── api-rest/           # Multi-tenant REST API service
 ├── fhir-client/        # FHIR data ingestion service
 ├── config/             # Configuration files
-│   ├── grafana/        # Grafana dashboards
-│   └── prometheus/     # Prometheus configuration
+│   ├── grafana/        # Grafana dashboards and configuration
+│   └── prometheus/     # Prometheus basic configuration
 ├── docker-compose.yml  # Service orchestration
 └── README.md          # This file
 ```
 
-### Key Files
+### Development Workflow
+**Key Files**:
 - `docker-compose.yml`: Service definitions and networking
 - `api-rest/internal/api/`: API service implementation
 - `fhir-client/internal/fhir/`: FHIR ingestion logic
-- `config/grafana/`: Pre-configured dashboards
-- `config/prometheus/`: Metrics collection configuration
+- `config/grafana/dashboards/`: Pre-configured Grafana dashboards
+- `config/prometheus/`: Basic Prometheus configuration (connection/healthcheck)
 
-### Adding New Features
+**Adding New Features**:
 1. **API Endpoints**: Add to `api-rest/internal/api/handlers.go`
 2. **Data Models**: Define in `api-rest/internal/api/types.go`
 3. **Database Operations**: Implement in `api-rest/internal/api/database.go`
@@ -280,7 +261,7 @@ docker-compose logs fhir
 curl https://hapi.fhir.org/baseR4/Patient?_count=1
 ```
 
-### Health Checks
+**Health Checks**:
 - **API Health**: `GET /` (requires tenant header)
 - **Database Health**: Check Couchbase web UI at `http://localhost:8091`
 - **Metrics Health**: `GET /metrics`
@@ -292,15 +273,15 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 - **Docker Compose**: [docker-compose.yml](docker-compose.yml)
 - **ADR (Architecture Decision Records)**: [docs/README.md](docs/README.md)
 
-## Security Considerations
+## Security & Future Enhancements
 
+**Security Considerations**:
 - **Multi-tenant isolation** ensures data separation
 - **Input validation** on all API endpoints
 - **Environment variables** for sensitive configuration
 - **No hardcoded credentials** in source code
 
-## Future Enhancements
-
+**Future Enhancements**:
 - **Scheduled Ingestion**: Daily/weekly data refresh
 - **AI Enrichment**: Machine learning data enhancement
 - **Advanced Analytics**: Complex query capabilities

@@ -37,7 +37,12 @@ func main() {
 		panic(fmt.Errorf("bucket not ready: %w", err))
 	}
 
-	// 1) Get up to 15 encounters, pick the first with both patient and practitioners
+	// 1) Count all resources by type
+	fmt.Printf("Total Encounters: %d\n", countByType(cluster, "Encounter"))
+	fmt.Printf("Total Patients: %d\n", countByType(cluster, "Patient"))
+	fmt.Printf("Total Practitioners: %d\n", countByType(cluster, "Practitioner"))
+
+	// 2) Get up to 15 encounters, pick the first with both patient and practitioners
 	type encRow struct {
 		ID              string                 `json:"id"`
 		Resource        map[string]interface{} `json:"resource"`
@@ -87,7 +92,7 @@ func main() {
 	}
 	fmt.Printf("Picked encounter key: %s\n", picked.ID)
 
-	// 2) Re-query this encounter by identifier (key)
+	// 3) Re-query this encounter by identifier (key)
 	q2 := "SELECT META(d).id AS id FROM `evtechallenge` AS d USE KEYS $key"
 	rows2, err := cluster.Query(q2, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"key": picked.ID}})
 	if err != nil {
@@ -108,13 +113,13 @@ func main() {
 	}
 	fmt.Printf("Re-query returned key: %s (match=%v)\n", foundKey, foundKey == picked.ID)
 
-	// 3) Extract patient/practitioner IDs from the encounter (already computed)
+	// 4) Extract patient/practitioner IDs from the encounter (already computed)
 	patientID := picked.SubjectPatient
 	practitionerIDs := picked.PractitionerIDs
 	fmt.Printf("Encounter patientID: %s\n", patientID)
 	fmt.Printf("Encounter practitionerIDs: %v\n", practitionerIDs)
 
-	// 4) Test query by these IDs (N1QL on resourceType+id)
+	// 5) Test query by these IDs (N1QL on resourceType+id)
 	if patientID != "" {
 		ok := existsByTypeAndID(cluster, "Patient", patientID)
 		fmt.Printf("Patient %s exists by N1QL: %v\n", patientID, ok)
@@ -124,18 +129,43 @@ func main() {
 		fmt.Printf("Practitioner %s exists by N1QL: %v\n", pid, ok)
 	}
 
-	// 5) List all Patients and verify membership
+	// 6) List all Patients and verify membership
 	allPatients := listIDsByType(cluster, "Patient")
 	if patientID != "" {
 		fmt.Printf("Patient %s present in full list: %v\n", patientID, contains(allPatients, patientID))
 	}
-	// 6) Same for Practitioners
+	// 7) Same for Practitioners
 	allPractitioners := listIDsByType(cluster, "Practitioner")
 	for _, pid := range practitionerIDs {
 		fmt.Printf("Practitioner %s present in full list: %v\n", pid, contains(allPractitioners, pid))
 	}
 }
 
+// countByType counts the number of resources by type
+func countByType(cluster *gocb.Cluster, rt string) int {
+	q := "SELECT COUNT(*) AS cnt FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt"
+	r, err := cluster.Query(q, &gocb.QueryOptions{
+		NamedParameters: map[string]interface{}{"rt": rt},
+	})
+	if err != nil {
+		fmt.Printf("countByType query error: %v\n", err)
+		return 0
+	}
+	defer r.Close()
+
+	var count int
+	for r.Next() {
+		var row struct {
+			Cnt int `json:"cnt"`
+		}
+		if err := r.Row(&row); err == nil {
+			count = row.Cnt
+		}
+	}
+	return count
+}
+
+// existsByTypeAndID checks if a resource exists by type and ID
 func existsByTypeAndID(cluster *gocb.Cluster, rt, id string) bool {
 	q := "SELECT 1 FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt AND d.`id`=$id LIMIT 1"
 	r, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": rt, "id": id}})
@@ -146,6 +176,7 @@ func existsByTypeAndID(cluster *gocb.Cluster, rt, id string) bool {
 	return r.Next()
 }
 
+// listIDsByType lists all IDs by type
 func listIDsByType(cluster *gocb.Cluster, rt string) []string {
 	q := "SELECT d.`id` AS id FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt"
 	r, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": rt}})
@@ -165,6 +196,7 @@ func listIDsByType(cluster *gocb.Cluster, rt string) []string {
 	return ids
 }
 
+// contains checks if an array contains a value
 func contains(arr []string, v string) bool {
 	for _, x := range arr {
 		if x == v {
@@ -174,6 +206,7 @@ func contains(arr []string, v string) bool {
 	return false
 }
 
+// extractIDFromEncounter extracts the ID from an encounter
 func extractIDFromEncounter(enc map[string]interface{}, resourceType string) string {
 	// subject.reference: "Patient/<id>"
 	if resourceType != "Patient" {
@@ -198,6 +231,7 @@ func extractIDFromEncounter(enc map[string]interface{}, resourceType string) str
 	return ""
 }
 
+// extractPractitionerIDsFromEncounter extracts the practitioner IDs from an encounter
 func extractPractitionerIDsFromEncounter(enc map[string]interface{}) []string {
 	var ids []string
 
@@ -231,6 +265,7 @@ func extractPractitionerIDsFromEncounter(enc map[string]interface{}) []string {
 	return ids
 }
 
+// extractIDFromReference extracts the ID from a reference
 func extractIDFromReference(reference, resourceType string) string {
 	if strings.Contains(reference, "/") {
 		parts := strings.Split(reference, "/")

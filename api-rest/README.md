@@ -65,6 +65,46 @@ All endpoints require `X-Tenant-ID` header and return review status for the requ
 - `GET /practitioners` - List all practitioners with review status
 - `GET /practitioners/{id}` - Get specific practitioner with review status
 
+### Pagination
+
+All list endpoints support pagination using query parameters:
+
+- `?count=<number>` - Number of items per page (default: 100, max: 10000)
+- `?page=<number>` - Page number (default: 1)
+
+**Example:**
+```bash
+# Get first 50 encounters
+GET /encounters?count=50&page=1
+
+# Get second page of 25 patients
+GET /patients?count=25&page=2
+
+# Get first 100 practitioners (default)
+GET /practitioners
+```
+
+**Paginated Response Format:**
+```json
+{
+  "data": [
+    {
+      "id": "encounter-123",
+      "resource": { /* FHIR resource data */ }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "count": 50,
+    "offset": 0,
+    "totalItems": 50,
+    "hasNext": true
+  }
+}
+```
+
+**Note:** Couchbase has a default limit of 100 documents per query. Use pagination to access larger datasets efficiently.
+
 ### Review Management
 - `POST /review-request` - Mark a resource for review
 

@@ -65,6 +65,46 @@ Todos os endpoints requerem header `X-Tenant-ID` e retornam status de revisão p
 - `GET /practitioners` - Listar todos os profissionais com status de revisão
 - `GET /practitioners/{id}` - Obter profissional específico com status de revisão
 
+### Paginação
+
+Todos os endpoints de lista suportam paginação usando parâmetros de query:
+
+- `?count=<número>` - Número de itens por página (padrão: 100, máximo: 10000)
+- `?page=<número>` - Número da página (padrão: 1)
+
+**Exemplo:**
+```bash
+# Obter primeiros 50 encontros
+GET /encounters?count=50&page=1
+
+# Obter segunda página de 25 pacientes
+GET /patients?count=25&page=2
+
+# Obter primeiros 100 profissionais (padrão)
+GET /practitioners
+```
+
+**Formato de Resposta Paginada:**
+```json
+{
+  "data": [
+    {
+      "id": "encounter-123",
+      "resource": { /* dados do recurso FHIR */ }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "count": 50,
+    "offset": 0,
+    "totalItems": 50,
+    "hasNext": true
+  }
+}
+```
+
+**Nota:** O Couchbase tem um limite padrão de 100 documentos por consulta. Use paginação para acessar conjuntos de dados maiores de forma eficiente.
+
 ### Gerenciamento de Revisões
 - `POST /review-request` - Marcar um recurso para revisão
 

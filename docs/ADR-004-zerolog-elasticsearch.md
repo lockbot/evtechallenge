@@ -21,7 +21,7 @@ A decisão de usar Zerolog com Elasticsearch foi baseada nas seguintes razões:
 - **Compatibilidade ECS**: Suporte nativo ao Elastic Common Schema (ECS), padronizando campos de log
 - **Integração Elasticsearch**: Logs JSON são facilmente ingeridos pelo Elasticsearch para análise e visualização
 - **Correlação de Logs**: Facilita correlação de logs entre microsserviços através de campos estruturados
-- **Sem Exposição de PHI**: Logs estruturados permitem controle granular sobre quais dados são logados
+
 - **Observabilidade Centralizada**: Elasticsearch oferece capacidades avançadas de busca, agregação e visualização
 
 ## Implementação

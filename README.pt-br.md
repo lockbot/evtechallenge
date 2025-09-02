@@ -36,12 +36,12 @@ docker-compose up -d evtechallenge-db evtechallenge-db-setup
 
 #### Iniciar Apenas o FHIR Client
 ```bash
-docker-compose up -d fhir
+docker-compose up -d --no-deps fhir
 ```
 
 #### Iniciar Apenas a API REST
 ```bash
-docker-compose up -d api
+docker-compose up -d --no-deps api
 ```
 
 ### Gerenciamento de Serviços
@@ -58,9 +58,9 @@ docker-compose stop api
 docker-compose stop evtechallenge-db
 ```
 
-#### Limpeza Completa
+#### Limpeza Completa ⚠️
 ```bash
-# Parar todos os serviços e remover volumes (AVISO: DELETA O BANCO DE DADOS)
+# Parar todos os serviços e remover volumes (⚠️AVISO⚠️: DELETA O BANCO DE DADOS)
 docker-compose down -v
 
 # Parar todos os serviços mas preservar dados
@@ -177,28 +177,22 @@ ENABLE_BUSINESS_METRICS=true
 
 ### Decisões de Observabilidade
 
-#### **Logging Estruturado**
-**Decisão**: Usar zerolog com formatação JSON e integração Elasticsearch.
+#### **Logging Estruturado e Métricas**
+**Decisão**: Usar zerolog com formatação JSON e integração Elasticsearch, além de coleta abrangente de métricas Prometheus.
 
 **Benefícios**:
 - Logs legíveis por máquina para análise
-- Sem exposição de PHI nos logs
-- Agregação de logs centralizada
-- Correlação entre serviços
-
-#### **Estratégia de Métricas**
-**Decisão**: Coleta abrangente de métricas com integração Prometheus.
-
-**Cobertura**:
-- Métricas de requisições HTTP (contagem, duração, status)
-- Métricas de lógica de negócio (requisições de revisão, falhas de validação)
-- Métricas de sistema (memória, threads, conexões)
-- Métricas de chamadas de API FHIR (taxas de sucesso/falha)
+- Agregação de logs centralizada e correlação entre serviços
+- Cobertura abrangente de métricas (requisições HTTP, lógica de negócio, recursos do sistema, chamadas de API FHIR)
 
 ## Monitoramento e Observabilidade
 
 ### Dashboards Grafana
 Acesso em `http://localhost:3000`
+
+**Credenciais de Login**:
+- Usuário: `admin`
+- Senha: `admin`
 
 **Dashboards Disponíveis**:
 - **Métricas de Sistema**: Uso de memória, CPU, contagem de threads
@@ -206,22 +200,7 @@ Acesso em `http://localhost:3000`
 - **Ingestão FHIR**: Contagem de recursos, taxas de sucesso de chamadas de API
 - **Métricas de Negócio**: Requisições de revisão, atividade de tenant
 
-### Logs
-**Elasticsearch**: `http://localhost:9200`
-
-**Fontes de Log**:
-- **FHIR Client**: Progresso de ingestão, chamadas de API, erros
-- **API REST**: Requisição/resposta, atividade de tenant, erros
-- **Sistema**: Logs de container, eventos de inicialização/desligamento
-
-### Métricas
-**Prometheus**: `http://localhost:9090`
-
-**Métricas Principais**:
-- `http_requests_total`: Contagem de requisições por endpoint e status
-- `http_request_duration_seconds`: Histogramas de tempo de resposta
-- `fhir_api_calls_total`: Taxas de sucesso/falha de chamadas de API FHIR
-- `couchbase_operations_total`: Métricas de operações de banco de dados
+**Nota**: Os logs estão disponíveis através da integração Elasticsearch nos dashboards do Grafana.
 
 ## Desenvolvimento
 
@@ -231,20 +210,21 @@ evtechallenge/
 ├── api-rest/           # Serviço de API REST multi-tenant
 ├── fhir-client/        # Serviço de ingestão de dados FHIR
 ├── config/             # Arquivos de configuração
-│   ├── grafana/        # Dashboards do Grafana
-│   └── prometheus/     # Configuração do Prometheus
+│   ├── grafana/        # Dashboards e configuração do Grafana
+│   └── prometheus/     # Configuração básica do Prometheus
 ├── docker-compose.yml  # Orquestração de serviços
 └── README.md          # Este arquivo
 ```
 
-### Arquivos Principais
+### Fluxo de Desenvolvimento
+**Arquivos Principais**:
 - `docker-compose.yml`: Definições de serviços e rede
 - `api-rest/internal/api/`: Implementação do serviço de API
 - `fhir-client/internal/fhir/`: Lógica de ingestão FHIR
-- `config/grafana/`: Dashboards pré-configurados
-- `config/prometheus/`: Configuração de coleta de métricas
+- `config/grafana/dashboards/`: Dashboards pré-configurados do Grafana
+- `config/prometheus/`: Configuração básica do Prometheus (conexão/healthcheck)
 
-### Adicionando Novas Funcionalidades
+**Adicionando Novas Funcionalidades**:
 1. **Endpoints de API**: Adicionar em `api-rest/internal/api/handlers.go`
 2. **Modelos de Dados**: Definir em `api-rest/internal/api/types.go`
 3. **Operações de Banco**: Implementar em `api-rest/internal/api/database.go`
@@ -281,7 +261,7 @@ docker-compose logs fhir
 curl https://hapi.fhir.org/baseR4/Patient?_count=1
 ```
 
-### Verificações de Saúde
+**Verificações de Saúde**:
 - **Saúde da API**: `GET /` (requer header de tenant)
 - **Saúde do Banco**: Verificar UI web do Couchbase em `http://localhost:8091`
 - **Saúde das Métricas**: `GET /metrics`
@@ -293,15 +273,15 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 - **Docker Compose**: [docker-compose.yml](docker-compose.yml)
 - **ADR (Registros de Decisões Arquiteturais)**: [docs/README.md](docs/README.md)
 
-## Considerações de Segurança
+## Segurança e Melhorias Futuras
 
+**Considerações de Segurança**:
 - **Isolamento multi-tenant** garante separação de dados
 - **Validação de entrada** em todos os endpoints da API
 - **Variáveis de ambiente** para configuração sensível
 - **Sem credenciais hardcoded** no código fonte
 
-## Melhorias Futuras
-
+**Melhorias Futuras**:
 - **Ingestão Agendada**: Atualização diária/semanal de dados
 - **Enriquecimento com IA**: Aprimoramento de dados com machine learning
 - **Analytics Avançados**: Capacidades de consulta complexa

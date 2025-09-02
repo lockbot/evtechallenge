@@ -193,15 +193,32 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
 			return
 		}
-		limitParam := r.URL.Query().Get("limit")
-		limit := 100
-		if limitParam != "" {
-			v, err := strconv.Atoi(limitParam)
-			if err == nil && v > 0 && v <= 10000 {
-				limit = v
+		// Pagination parameters
+		countParam := r.URL.Query().Get("count")
+		pageParam := r.URL.Query().Get("page")
+
+		// Default values
+		count := 100
+		page := 1
+
+		// Parse count parameter
+		if countParam != "" {
+			if v, err := strconv.Atoi(countParam); err == nil && v > 0 && v <= 10000 {
+				count = v
 			}
 		}
-		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(limit)
+
+		// Parse page parameter
+		if pageParam != "" {
+			if v, err := strconv.Atoi(pageParam); err == nil && v > 0 {
+				page = v
+			}
+		}
+
+		// Calculate offset
+		offset := (page - 1) * count
+
+		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
 		rows, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": resourceType}})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -227,9 +244,22 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 			}
 			out = append(out, rr)
 		}
+
+		// Prepare paginated response
+		response := map[string]interface{}{
+			"data": out,
+			"pagination": map[string]interface{}{
+				"page":       page,
+				"count":      count,
+				"offset":     offset,
+				"totalItems": len(out),
+				"hasNext":    len(out) == count,
+			},
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(out)
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
