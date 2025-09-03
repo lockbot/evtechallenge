@@ -16,7 +16,7 @@ services:
     networks:
       - evtechallenge_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8091/pools"]
+      test: ["CMD", "curl", "-f", "http://localhost:8091"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -99,8 +99,8 @@ services:
   # API REST Service
   api:
     build: 
-      context: ./api-rest
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api-rest/Dockerfile
     container_name: evtechallenge-api
     ports:
       - "${API_PORT}:${API_PORT}"
@@ -115,7 +115,6 @@ services:
       - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
       - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
       - API_PORT=${API_PORT}
     networks:
       - evtechallenge_network
@@ -124,8 +123,8 @@ services:
   # FHIR Client Service
   fhir:
     build:
-      context: ./fhir-client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: fhir-client/Dockerfile
     container_name: evtechallenge-fhir
     ports:
       - "${FHIR_PORT}:${FHIR_PORT}"
@@ -140,7 +139,6 @@ services:
       - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
       - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
       - FHIR_BASE_URL=${FHIR_BASE_URL}
       - FHIR_TIMEOUT=${FHIR_TIMEOUT}
       - FHIR_PORT=${FHIR_PORT}
@@ -150,7 +148,7 @@ services:
 
   # Elasticsearch for logs
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.1.3
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
@@ -163,6 +161,12 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - evtechallenge_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
     profiles:
       - observability
 

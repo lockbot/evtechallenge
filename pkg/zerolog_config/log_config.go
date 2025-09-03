@@ -54,7 +54,7 @@ func StartupWithEnv(elasticsearchURL string, subAddress string) {
 		return
 	}
 
-	// ECS format for Elasticsearch
+	// ECS format for Elasticsearch with semantic endpoint
 	ecsLogger := ecszerolog.New(&ElasticsearchWriter{
 		URL: elasticsearchURL + "/" + subAddress,
 	})

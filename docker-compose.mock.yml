@@ -1,8 +1,8 @@
 services:
   mock:
     build:
-      context: ./fhir-client
-      dockerfile: ./cmd/index-query-couchbase/Dockerfile
+      context: .
+      dockerfile: fhir-client/cmd/index-query-couchbase/Dockerfile
     container_name: evtechallenge-mock
     environment:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}

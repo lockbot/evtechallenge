@@ -6,9 +6,9 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api/internal/api"            // Update with your actual module name
-	"stealthcompany.com/api/internal/metrics"        // Update with your actual module name
-	"stealthcompany.com/api/internal/zerolog_config" // Update with your actual module name
+	"stealthcompany.com/api-rest/internal/api"
+	"stealthcompany.com/api-rest/internal/metrics"
+	"stealthcompany.com/pkg/zerolog_config"
 )
 
 func main() {
@@ -24,11 +24,10 @@ func main() {
 
 	// Get configuration from environment
 	elasticsearchURL := getEnvOrDefault("ELASTICSEARCH_URL", "http://elasticsearch:9200")
-	elasticsearchIndex := getEnvOrDefault("ELASTICSEARCH_INDEX", "logs")
 	apiPort := getEnvOrDefault("API_PORT", "8080")
 
 	// Initialize zerolog with Elasticsearch
-	zerolog_config.StartupWithEnv(elasticsearchURL, elasticsearchIndex)
+	zerolog_config.StartupWithEnv(elasticsearchURL, "api-")
 
 	log.Info().Msg("Starting evtechallenge-api service")
 

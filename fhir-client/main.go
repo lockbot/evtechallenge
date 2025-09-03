@@ -10,9 +10,9 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/fhir/internal/fhir"
-	"stealthcompany.com/fhir/internal/metrics"
-	"stealthcompany.com/fhir/internal/zerolog_config"
+	"stealthcompany.com/fhir-client/internal/fhir"
+	"stealthcompany.com/fhir-client/internal/metrics"
+	"stealthcompany.com/pkg/zerolog_config"
 )
 
 func main() {
@@ -28,11 +28,10 @@ func main() {
 
 	// Get configuration from environment
 	elasticsearchURL := getEnvOrDefault("ELASTICSEARCH_URL", "http://elasticsearch:9200")
-	elasticsearchIndex := getEnvOrDefault("ELASTICSEARCH_INDEX", "logs")
 	fhirPort := getEnvOrDefault("FHIR_PORT", "8081")
 
 	// Initialize zerolog with Elasticsearch
-	zerolog_config.StartupWithEnv(elasticsearchURL, elasticsearchIndex)
+	zerolog_config.StartupWithEnv(elasticsearchURL, "fhir-")
 
 	log.Info().Msg("Starting evtechallenge-fhir service")
 

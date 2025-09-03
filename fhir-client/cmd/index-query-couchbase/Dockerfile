@@ -3,15 +3,17 @@ FROM golang:1.25.0-alpine3.22 AS builder
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
 
-# Copy module files and download deps
+# Copy dependency files first (for better layer caching)
 COPY go.mod go.sum ./
+
+# Download and verify dependencies
 RUN go mod download && go mod verify
 
-# Copy source
+# Copy source code
 COPY . .
 
-# Build the mock binary
-RUN go build -o /mock ./cmd/index-query-couchbase
+# Build from the root context
+RUN go build -o /mock ./fhir-client/cmd/index-query-couchbase
 
 FROM alpine:3.22 AS runtime
 RUN apk add --no-cache ca-certificates

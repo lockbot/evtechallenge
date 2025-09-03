@@ -11,11 +11,10 @@ datasources:
     type: elasticsearch
     access: proxy
     url: http://elasticsearch:9200
-    database: logs*
+    database: "api-*,fhir-*"
     uid: elasticsearch
     jsonData:
       timeField: "@timestamp"
       esVersion: 9.1.2
       maxConcurrentShardRequests: 5
       logMessageField: message
-      logLevelField: level

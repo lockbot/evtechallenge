@@ -20,7 +20,7 @@ type ElasticsearchWriter struct {
 func (ew ElasticsearchWriter) Write(p []byte) (n int, err error) {
 	// Send JSON log to Elasticsearch
 	resp, err := http.Post(
-		ew.URL+"/_doc",
+		ew.URL,
 		"application/json",
 		bytes.NewBuffer(p),
 	)
@@ -54,7 +54,7 @@ func StartupWithEnv(elasticsearchURL string, subAddress string) {
 		return
 	}
 
-	// ECS format for Elasticsearch
+	// ECS format for Elasticsearch with semantic endpoint
 	ecsLogger := ecszerolog.New(&ElasticsearchWriter{
 		URL: elasticsearchURL + "/" + subAddress,
 	})

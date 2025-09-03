@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/fhir/internal/metrics"
+	"stealthcompany.com/fhir-client/internal/metrics"
 )
 
 // syncExistingData checks existing data and syncs with FHIR API

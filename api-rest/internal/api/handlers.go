@@ -9,7 +9,7 @@ import (
 	"github.com/couchbase/gocb/v2"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api/internal/metrics"
+	"stealthcompany.com/api-rest/internal/metrics"
 )
 
 // HelloHandler returns a simple hello world message

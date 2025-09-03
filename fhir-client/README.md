@@ -41,7 +41,7 @@ Environment variables:
 - `FHIR_BASE_URL=https://hapi.fhir.org/baseR4`
 - `FHIR_TIMEOUT=30s`
 - `ELASTICSEARCH_URL=http://elasticsearch:9200`
-- `ELASTICSEARCH_INDEX=logs`
+
 
 ## Ingestion Process
 

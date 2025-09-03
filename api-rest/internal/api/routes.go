@@ -4,7 +4,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api/internal/metrics"
+	"stealthcompany.com/api-rest/internal/metrics"
 )
 
 // SetupRoutes configures and returns the HTTP router

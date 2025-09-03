@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"stealthcompany.com/fhir/internal/metrics"
+	"stealthcompany.com/fhir-client/internal/metrics"
 )
 
 // fetchFHIRBundle fetches a FHIR bundle from the given URL

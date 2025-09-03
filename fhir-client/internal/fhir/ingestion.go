@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/fhir/internal/metrics"
+	"stealthcompany.com/fhir-client/internal/metrics"
 )
 
 // IngestData performs the complete FHIR data ingestion process
