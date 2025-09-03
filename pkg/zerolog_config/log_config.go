@@ -6,11 +6,16 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"go.elastic.co/ecszerolog"
 )
+
+var appPrefix string
+var setAppPrefixOnce *sync.Once = &sync.Once{}
+var startupLoggerOnce *sync.Once = &sync.Once{}
 
 // ElasticsearchWriter sends logs directly to Elasticsearch
 type ElasticsearchWriter struct {
@@ -45,12 +50,13 @@ func (clw ConsoleLevelWriter) Write(p []byte) (n int, err error) {
 	return clw.Writer.Write(p)
 }
 
-func StartupWithEnv(elasticsearchURL string, subAddress string) {
+func startupLoggerWithEnv(elasticsearchURL string, subAddress string) {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	if elasticsearchURL == "" {
 		// Fallback to console only
-		log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+		log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Str("app", appPrefix).
+			Timestamp().Logger()
 		return
 	}
 
@@ -68,5 +74,26 @@ func StartupWithEnv(elasticsearchURL string, subAddress string) {
 		consoleWriter,
 	)
 
-	log.Logger = zerolog.New(multi).With().Timestamp().Logger()
+	log.Logger = zerolog.New(multi).With().Str("app", appPrefix).
+		Timestamp().Logger()
+}
+
+// SetAppPrefix sets the app prefix
+func SetAppPrefix(subAddress string) {
+	setAppPrefixOnce.Do(func() {
+		appPrefix = subAddress
+	})
+}
+
+// StartupWithEnv sets up the logger with the given Elasticsearch URL and subAddress.
+// It returns an error if the subAddress is empty.
+// Run SetAppPrefix before StartupWithEnv.
+func StartupWithEnv(elasticsearchURL string, subAddress string) error {
+	if subAddress == "" {
+		return fmt.Errorf("subAddress is required")
+	}
+	startupLoggerOnce.Do(func() {
+		startupLoggerWithEnv(elasticsearchURL, subAddress)
+	})
+	return nil
 }

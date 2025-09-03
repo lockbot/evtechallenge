@@ -30,8 +30,11 @@ func main() {
 	elasticsearchURL := getEnvOrDefault("ELASTICSEARCH_URL", "http://elasticsearch:9200")
 	fhirPort := getEnvOrDefault("FHIR_PORT", "8081")
 
+	// Set app prefix
+	zerolog_config.SetAppPrefix("fhir-client")
+
 	// Initialize zerolog with Elasticsearch
-	zerolog_config.StartupWithEnv(elasticsearchURL, "fhir-")
+	zerolog_config.StartupWithEnv(elasticsearchURL, "logs")
 
 	log.Info().Msg("Starting evtechallenge-fhir service")
 

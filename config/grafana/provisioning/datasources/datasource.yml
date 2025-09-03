@@ -11,7 +11,7 @@ datasources:
     type: elasticsearch
     access: proxy
     url: http://elasticsearch:9200
-    database: "api-*,fhir-*"
+    database: "logs*"
     uid: elasticsearch
     jsonData:
       timeField: "@timestamp"
