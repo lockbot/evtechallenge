@@ -39,15 +39,15 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Parse and validate the JWT token
 		claims, err := validateJWTToken(tokenString)
 		if err != nil {
-			log.Error().Err(err).Msg(LogJWTValidationFailed)
+			log.Error().Err(err).Msg("JWT token validation failed")
 			http.Error(w, ErrInvalidToken, http.StatusUnauthorized)
 			return
 		}
 
-		// Extract tenant ID from user groups
-		tenantID, err := extractTenantFromGroups(claims.Groups)
-		if err != nil {
-			log.Error().Err(err).Msg(LogTenantExtractionFailed)
+		// Extract tenant ID from username (since groups aren't configured yet)
+		tenantID := claims.PreferredUsername
+		if tenantID == "" {
+			log.Warn().Msg("No preferred_username found in token")
 			http.Error(w, ErrInvalidTenantConfig, http.StatusForbidden)
 			return
 		}

@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/couchbase/gocb/v2 v2.11.0
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.23.0

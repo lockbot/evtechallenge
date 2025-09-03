@@ -86,6 +86,13 @@ func main() {
 	}
 
 	log.Info().Msg("FHIR data ingestion completed successfully")
+
+	// Keep the service running for metrics even after ingestion completes
+	log.Info().Msg("FHIR ingestion complete, keeping service running for metrics")
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	log.Info().Msg("Shutting down FHIR service")
 }
 
 // Helper function to get environment variable with default

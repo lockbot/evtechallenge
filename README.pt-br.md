@@ -15,6 +15,7 @@ Esta plataforma consiste em **dois microsserviços** trabalhando juntos para for
 
 ### Infraestrutura
 - **Couchbase**: Banco de dados de documentos multi-tenant com suporte N1QL
+- **Keycloak**: Gerenciamento de Identidade e Acesso (IAM) para autenticação B2B
 - **Elasticsearch**: Logs centralizados com logs JSON estruturados
 - **Prometheus**: Coleta de métricas e monitoramento
 - **Grafana**: Visualização e dashboards
@@ -74,16 +75,29 @@ Crie um arquivo `.env` na raiz do repositório:
 ```bash
 # Configuração do Couchbase
 COUCHBASE_URL=couchbase://evtechallenge-db
+COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+COUCHBASE_ADMINISTRATOR_PASSWORD=password
 COUCHBASE_USERNAME=evtechallenge_user
 COUCHBASE_PASSWORD=password
 COUCHBASE_BUCKET=evtechallenge
+COUCHBASE_MANAGEMENT_HOST=evtechallenge-db:8091
 
 # Configuração do FHIR Client
 FHIR_BASE_URL=https://hapi.fhir.org/baseR4
 FHIR_TIMEOUT=30s
+FHIR_PORT=8081
 
 # Configuração da API
 API_PORT=8080
+
+# Configuração do Keycloak
+KEYCLOAK_ADMIN=admin
+KEYCLOAK_ADMIN_PASSWORD=admin
+KEYCLOAK_PORT=8082
+
+
+# Configuração do Grafana
+GRAFANA_ADMIN_PASSWORD=admin
 
 # Configuração de Observabilidade
 ELASTICSEARCH_URL=http://elasticsearch:9200
@@ -272,6 +286,8 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 - **FHIR Client**: [fhir-client/README.md](fhir-client/README.md)
 - **Docker Compose**: [docker-compose.yml](docker-compose.yml)
 - **ADR (Registros de Decisões Arquiteturais)**: [docs/README.md](docs/README.md)
+- **Autenticação Keycloak**: [ADR-005](docs/adr-005-keycloak-authentication.md)
+- **Arquitetura Multi-Tenant**: [ADR-006](docs/adr-006-multi-tenancy-architecture.md)
 
 ## Segurança e Melhorias Futuras
 

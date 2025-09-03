@@ -2,11 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // TenantCollectionManager manages tenant collections
@@ -23,7 +24,7 @@ func NewTenantCollectionManager(bucket *gocb.Bucket) *TenantCollectionManager {
 
 // WaitForFHIRIngestion waits for FHIR client to complete ingestion
 func (tcm *TenantCollectionManager) WaitForFHIRIngestion(ctx context.Context) error {
-	log.Println("Waiting for FHIR ingestion to complete...")
+	log.Info().Msg("Waiting for FHIR ingestion to complete...")
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -35,16 +36,16 @@ func (tcm *TenantCollectionManager) WaitForFHIRIngestion(ctx context.Context) er
 		case <-ticker.C:
 			ready, err := tcm.checkIngestionStatus()
 			if err != nil {
-				log.Printf("Error checking ingestion status: %v", err)
+				log.Error().Err(err).Msg("Error checking ingestion status")
 				continue
 			}
 
 			if ready {
-				log.Println("FHIR ingestion completed, API is ready to serve requests")
+				log.Info().Msg("FHIR ingestion completed, API is ready to serve requests")
 				return nil
 			}
 
-			log.Println("FHIR ingestion still in progress, waiting...")
+			log.Info().Msg("FHIR ingestion still in progress, waiting...")
 		}
 	}
 }
@@ -55,8 +56,8 @@ func (tcm *TenantCollectionManager) checkIngestionStatus() (bool, error) {
 
 	result, err := collection.Get(IngestionStatusKey, &gocb.GetOptions{})
 	if err != nil {
-		// Check if it's a key not found error (simplified check)
-		if err.Error() == "document not found" {
+		// Check if it's a key not found error using proper Couchbase error checking
+		if errors.Is(err, gocb.ErrDocumentNotFound) {
 			// Ingestion status document doesn't exist yet
 			return false, nil
 		}
@@ -92,7 +93,7 @@ func (tcm *TenantCollectionManager) EnsureTenantCollection(tenantID string) (*go
 	}
 
 	// Collection doesn't exist, create it by copying DefaultCollection
-	log.Printf("Creating tenant collection: %s", collectionName)
+	log.Info().Str("collection", collectionName).Msg("Creating tenant collection")
 
 	// For now, we'll use the default collection as a fallback
 	// In a real implementation, you'd want to copy the DefaultCollection data
@@ -103,4 +104,17 @@ func (tcm *TenantCollectionManager) EnsureTenantCollection(tenantID string) (*go
 // GetTenantCollection returns the collection for a specific tenant
 func (tcm *TenantCollectionManager) GetTenantCollection(tenantID string) (*gocb.Collection, error) {
 	return tcm.EnsureTenantCollection(tenantID)
+}
+
+// Global accessor for TenantCollectionManager
+var globalTenantCollectionManager *TenantCollectionManager
+
+// SetGlobalTenantCollectionManager sets the global instance
+func SetGlobalTenantCollectionManager(manager *TenantCollectionManager) {
+	globalTenantCollectionManager = manager
+}
+
+// GetGlobalTenantCollectionManager returns the global instance
+func GetGlobalTenantCollectionManager() *TenantCollectionManager {
+	return globalTenantCollectionManager
 }

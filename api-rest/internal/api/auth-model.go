@@ -60,13 +60,13 @@ type JWTClaims struct {
 	Iat               int64                  `json:"iat"`
 	Exp               int64                  `json:"exp"`
 	Iss               string                 `json:"iss"`
-	Aud               []string               `json:"aud"`
+	Aud               jwt.ClaimStrings       `json:"aud"`
 	Typ               string                 `json:"typ"`
 	Azp               string                 `json:"azp"`
 	Nonce             string                 `json:"nonce"`
 	SessionState      string                 `json:"session_state"`
 	Acr               string                 `json:"acr"`
-	AllowedOrigins    []string               `json:"allowed-origins"`
+	AllowedOrigins    interface{}            `json:"allowed-origins"`
 	RealmAccess       map[string]interface{} `json:"realm_access"`
 	ResourceAccess    map[string]interface{} `json:"resource_access"`
 	Scope             string                 `json:"scope"`
@@ -82,10 +82,7 @@ type JWTClaims struct {
 
 // GetAudience implements jwt.Claims interface
 func (c *JWTClaims) GetAudience() (jwt.ClaimStrings, error) {
-	if len(c.Aud) == 0 {
-		return jwt.ClaimStrings{}, nil
-	}
-	return jwt.ClaimStrings(c.Aud), nil
+	return c.Aud, nil
 }
 
 // GetExpirationTime implements jwt.Claims interface

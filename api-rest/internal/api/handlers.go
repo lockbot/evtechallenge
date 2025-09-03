@@ -146,11 +146,18 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
 			return
 		}
-		// Get the tenant collection
-		collection, err := GetTenantCollection(tenantID)
+		// Get the tenant collection from the tenant goroutine manager
+		tenantManager := GetTenantGoroutineManager()
+		if tenantManager == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "tenant goroutine manager not initialized"})
+			return
+		}
+
+		collection, err := tenantManager.GetTenantCollection(tenantID)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to get tenant collection"})
+			json.NewEncoder(w).Encode(map[string]string{"error": "tenant not ready or collection not initialized"})
 			return
 		}
 
@@ -227,20 +234,43 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		// Calculate offset
 		offset := (page - 1) * count
 
-		// Get the tenant collection for the query
-		collection, err := GetTenantCollection(tenantID)
-		if err != nil {
+		// Get the tenant collection for the query from the tenant goroutine manager
+		tenantManager := GetTenantGoroutineManager()
+		if tenantManager == nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to get tenant collection"})
+			json.NewEncoder(w).Encode(map[string]string{"error": "tenant goroutine manager not initialized"})
 			return
 		}
 
-		// Query the tenant collection directly
-		// In Couchbase, we can query collections using the collection name in the FROM clause
-		collectionName := collection.Name()
-		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "`.`" + collectionName + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
+		// Check if tenant is ready (we'll use bucket-level query for now)
+		_, err = tenantManager.GetTenantCollection(tenantID)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "tenant not ready or collection not initialized"})
+			return
+		}
+
+		// Query the tenant-specific scope and collection
+		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "`.`" + tenantID + "`.`reviewable-fhir` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
+
+		// Debug logging
+		log.Info().
+			Str("tenant", tenantID).
+			Str("query", q).
+			Str("resourceType", resourceType).
+			Int("count", count).
+			Int("offset", offset).
+			Msg("Executing N1QL query")
+
 		rows, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": resourceType}})
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant", tenantID).
+				Str("query", q).
+				Str("resourceType", resourceType).
+				Msg("N1QL query failed")
+
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "query failed"})
 			return

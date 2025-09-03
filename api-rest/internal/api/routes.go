@@ -17,6 +17,9 @@ func SetupRoutes() *mux.Router {
 	// Add authentication middleware to all routes
 	r.Use(AuthMiddleware)
 
+	// Add tenant warmth middleware to protect FHIR routes
+	r.Use(TenantWarmthMiddleware)
+
 	// Initialize Couchbase (non-fatal if fails; endpoints will report unavailable)
 	err := InitCouchbase()
 	if err != nil {
@@ -38,6 +41,9 @@ func SetupRoutes() *mux.Router {
 
 	// Review request endpoint
 	r.HandleFunc("/review-request", ReviewRequestHandler).Methods("POST")
+
+	// Tenant warm-up endpoint
+	r.HandleFunc("/warm-up-tenant", WarmUpTenantHandler).Methods("POST")
 
 	// Prometheus metrics endpoint
 	r.Handle("/metrics", promhttp.Handler()).Methods("GET")

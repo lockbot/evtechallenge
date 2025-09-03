@@ -14,10 +14,15 @@ func CreateReviewRequest(tenantID, resourceType, resourceID string) error {
 		return fmt.Errorf("database not initialized")
 	}
 
-	// Get the tenant collection
-	collection, err := GetTenantCollection(tenantID)
+	// Get the tenant collection from the tenant goroutine manager
+	tenantManager := GetTenantGoroutineManager()
+	if tenantManager == nil {
+		return fmt.Errorf("tenant goroutine manager not initialized")
+	}
+
+	collection, err := tenantManager.GetTenantCollection(tenantID)
 	if err != nil {
-		return fmt.Errorf("failed to get tenant collection: %w", err)
+		return fmt.Errorf("tenant not ready or collection not initialized: %w", err)
 	}
 
 	// Get the resource from tenant collection
@@ -43,12 +48,4 @@ func CreateReviewRequest(tenantID, resourceType, resourceID string) error {
 	}
 
 	return nil
-}
-
-// GetTenantCollection is a helper function to get the collection for a tenant
-// This will be implemented in tenant_collections.go
-func GetTenantCollection(tenantID string) (*gocb.Collection, error) {
-	// This is a placeholder - the real implementation is in tenant_collections.go
-	// We'll need to import gocb and implement this properly
-	return nil, fmt.Errorf("GetTenantCollection not implemented yet")
 }

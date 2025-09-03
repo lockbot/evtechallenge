@@ -15,6 +15,7 @@ This platform consists of **two microservices** working together to provide a co
 
 ### Infrastructure
 - **Couchbase**: Multi-tenant document database with N1QL support
+- **Keycloak**: Identity and Access Management (IAM) for B2B authentication
 - **Elasticsearch**: Centralized logging with structured JSON logs
 - **Prometheus**: Metrics collection and monitoring
 - **Grafana**: Visualization and dashboards
@@ -74,16 +75,29 @@ Create a `.env` file in the repository root:
 ```bash
 # Couchbase Configuration
 COUCHBASE_URL=couchbase://evtechallenge-db
+COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+COUCHBASE_ADMINISTRATOR_PASSWORD=password
 COUCHBASE_USERNAME=evtechallenge_user
 COUCHBASE_PASSWORD=password
 COUCHBASE_BUCKET=evtechallenge
+COUCHBASE_MANAGEMENT_HOST=evtechallenge-db:8091
 
 # FHIR Client Configuration
 FHIR_BASE_URL=https://hapi.fhir.org/baseR4
 FHIR_TIMEOUT=30s
+FHIR_PORT=8081
 
 # API Configuration
 API_PORT=8080
+
+# Keycloak Configuration
+KEYCLOAK_ADMIN=admin
+KEYCLOAK_ADMIN_PASSWORD=admin
+KEYCLOAK_PORT=8082
+
+
+# Grafana Configuration
+GRAFANA_ADMIN_PASSWORD=admin
 
 # Observability Configuration
 ELASTICSEARCH_URL=http://elasticsearch:9200
@@ -268,10 +282,14 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 
 ## Documentation
 
+- **README_K**
+
 - **API REST**: [api-rest/README.md](api-rest/README.md)
 - **FHIR Client**: [fhir-client/README.md](fhir-client/README.md)
 - **Docker Compose**: [docker-compose.yml](docker-compose.yml)
 - **ADR (Architecture Decision Records)**: [docs/README.md](docs/README.md)
+- **Keycloak Authentication**: [ADR-005](docs/adr-005-keycloak-authentication.md)
+- **Multi-Tenancy Architecture**: [ADR-006](docs/adr-006-multi-tenancy-architecture.md)
 
 ## Security & Future Enhancements
 

@@ -42,6 +42,7 @@ func InitCouchbase() error {
 	}
 	cbCluster = cluster
 	cbBucket = bucket
+
 	return nil
 }
 
