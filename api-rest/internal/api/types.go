@@ -7,27 +7,18 @@ type AllGoodRequest struct {
 	Yes bool `json:"yes"`
 }
 
+// IngestionStatus represents the FHIR client ingestion status
+type IngestionStatus struct {
+	Ready       bool      `json:"ready"`
+	StartedAt   time.Time `json:"startedAt"`
+	CompletedAt time.Time `json:"completedAt,omitempty"`
+	Message     string    `json:"message"`
+}
+
 // ReviewRequest represents the expected JSON payload for review requests
 type ReviewRequest struct {
 	Entity string `json:"entity"`
 	ID     string `json:"id"`
-}
-
-// ReviewDocument represents a tenant's review list
-type ReviewDocument struct {
-	TenantID      string                 `json:"tenantId"`
-	Encounters    map[string]interface{} `json:"encounters"`    // key: "Encounter/ID", value: review metadata
-	Patients      map[string]interface{} `json:"patients"`      // key: "Patient/ID", value: review metadata
-	Practitioners map[string]interface{} `json:"practitioners"` // key: "Practitioner/ID", value: review metadata
-	Updated       time.Time              `json:"updated"`
-}
-
-// ReviewInfo contains review status and metadata
-type ReviewInfo struct {
-	Reviewed   bool   `json:"reviewed"`
-	ReviewTime string `json:"reviewTime,omitempty"`
-	EntityType string `json:"entityType,omitempty"`
-	EntityID   string `json:"entityID,omitempty"`
 }
 
 // ResponseWithReview wraps API responses with review status
@@ -46,4 +37,11 @@ type QueryRow struct {
 const (
 	TenantHeaderKey = "X-Tenant-ID"
 	DefaultTenant   = "default"
+
+	// System document keys
+	IngestionStatusKey = "_system/ingestion_status"
+
+	// Collection naming
+	DefaultCollectionName  = "_default"
+	TenantCollectionPrefix = "tenant_"
 )

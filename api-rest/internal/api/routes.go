@@ -14,6 +14,9 @@ func SetupRoutes() *mux.Router {
 	// Add metrics middleware to all routes
 	r.Use(metrics.MetricsMiddleware)
 
+	// Add authentication middleware to all routes
+	r.Use(AuthMiddleware)
+
 	// Initialize Couchbase (non-fatal if fails; endpoints will report unavailable)
 	err := InitCouchbase()
 	if err != nil {
@@ -38,6 +41,9 @@ func SetupRoutes() *mux.Router {
 
 	// Prometheus metrics endpoint
 	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
+
+	// Health check endpoint (no auth required)
+	r.HandleFunc("/health", HealthCheckHandler).Methods("GET")
 
 	return r
 }

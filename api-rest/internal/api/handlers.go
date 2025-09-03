@@ -146,8 +146,16 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
 			return
 		}
+		// Get the tenant collection
+		collection, err := GetTenantCollection(tenantID)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to get tenant collection"})
+			return
+		}
+
 		key := resourceType + "/" + id
-		res, err := bucket.DefaultCollection().Get(key, nil)
+		res, err := collection.Get(key, nil)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
@@ -161,12 +169,13 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			return
 		}
 
-		// Check review status for this tenant
-		reviewInfo := GetReviewInfo(tenantID, resourceType, id)
+		// Get review info directly from the document
+		reviewed, _ := doc["reviewed"].(bool)
+		reviewTime, _ := doc["reviewTime"].(string)
 
 		response := ResponseWithReview{
-			Reviewed:   reviewInfo.Reviewed,
-			ReviewTime: reviewInfo.ReviewTime,
+			Reviewed:   reviewed,
+			ReviewTime: reviewTime,
 			Data:       doc,
 		}
 
@@ -218,7 +227,18 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		// Calculate offset
 		offset := (page - 1) * count
 
-		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
+		// Get the tenant collection for the query
+		collection, err := GetTenantCollection(tenantID)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to get tenant collection"})
+			return
+		}
+
+		// Query the tenant collection directly
+		// In Couchbase, we can query collections using the collection name in the FROM clause
+		collectionName := collection.Name()
+		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "`.`" + collectionName + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
 		rows, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": resourceType}})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -234,14 +254,6 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 				continue
 			}
 
-			// Check review status for each resource
-			reviewInfo := GetReviewInfo(tenantID, resourceType, rr.ID)
-			rr.Resource["reviewed"] = reviewInfo.Reviewed
-			if reviewInfo.Reviewed {
-				rr.Resource["reviewTime"] = reviewInfo.ReviewTime
-				rr.Resource["entityType"] = reviewInfo.EntityType
-				rr.Resource["entityID"] = reviewInfo.EntityID
-			}
 			out = append(out, rr)
 		}
 
@@ -331,5 +343,15 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		"tenant":   tenantID,
 		"entity":   entityKey,
 		"reviewed": "true",
+	})
+}
+
+// HealthCheckHandler provides a simple health check endpoint
+func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "healthy",
+		"service": "evtechallenge-api",
 	})
 }

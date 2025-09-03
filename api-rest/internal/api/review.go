@@ -2,154 +2,53 @@ package api
 
 import (
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
+
+	"github.com/couchbase/gocb/v2"
 )
 
-// GetTenantFromRequest extracts tenant ID from request headers
-func GetTenantFromRequest(r *http.Request) (string, error) {
-	tenant := r.Header.Get(TenantHeaderKey)
-	if tenant == "" {
-		return "", fmt.Errorf("missing required header: %s", TenantHeaderKey)
-	}
-	trimmedTenant := strings.TrimSpace(tenant)
-	if trimmedTenant == "" {
-		return "", fmt.Errorf("tenant ID cannot be empty")
-	}
-	return trimmedTenant, nil
-}
-
-// GetReviewInfo checks if a resource is reviewed for a tenant and returns review metadata
-func GetReviewInfo(tenantID, resourceType, resourceID string) ReviewInfo {
-	bucket := GetBucket()
-	if bucket == nil {
-		return ReviewInfo{Reviewed: false}
-	}
-	reviewKey := fmt.Sprintf("Review/%s", tenantID)
-	var reviewDoc ReviewDocument
-	res, err := bucket.DefaultCollection().Get(reviewKey, nil)
-	if err != nil {
-		return ReviewInfo{Reviewed: false}
-	}
-	err = res.Content(&reviewDoc)
-	if err != nil {
-		return ReviewInfo{Reviewed: false}
-	}
-
-	// Get the appropriate map based on resource type
-	var reviewData map[string]interface{}
-	switch resourceType {
-	case "Encounter":
-		reviewData = reviewDoc.Encounters
-	case "Patient":
-		reviewData = reviewDoc.Patients
-	case "Practitioner":
-		reviewData = reviewDoc.Practitioners
-	default:
-		return ReviewInfo{Reviewed: false}
-	}
-
-	// If the map is nil, no reviews exist for this resource type
-	if reviewData == nil {
-		return ReviewInfo{Reviewed: false}
-	}
-
-	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
-	reviewDataItem, exists := reviewData[entityKey]
-	if !exists {
-		return ReviewInfo{Reviewed: false}
-	}
-
-	reviewMap, ok := reviewDataItem.(map[string]interface{})
-	if !ok {
-		return ReviewInfo{Reviewed: true, EntityType: resourceType, EntityID: resourceID}
-	}
-
-	reviewTime := ""
-	if rt, ok := reviewMap["reviewTime"].(string); ok {
-		reviewTime = rt
-	}
-
-	return ReviewInfo{
-		Reviewed:   true,
-		ReviewTime: reviewTime,
-		EntityType: resourceType,
-		EntityID:   resourceID,
-	}
-}
-
-// CreateReviewRequest creates or updates a review for a resource
+// CreateReviewRequest marks a resource as reviewed for a tenant
 func CreateReviewRequest(tenantID, resourceType, resourceID string) error {
 	bucket := GetBucket()
 	if bucket == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	// Verify the resource exists
-	resourceKey := resourceType + "/" + resourceID
-	_, err := bucket.DefaultCollection().Get(resourceKey, nil)
+	// Get the tenant collection
+	collection, err := GetTenantCollection(tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant collection: %w", err)
+	}
+
+	// Get the resource from tenant collection
+	resourceKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
+	result, err := collection.Get(resourceKey, &gocb.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("resource not found: %w", err)
 	}
 
-	// Get or create review document for this tenant
-	reviewKey := fmt.Sprintf("Review/%s", tenantID)
-	var reviewDoc ReviewDocument
-	res, err := bucket.DefaultCollection().Get(reviewKey, nil)
+	var resource map[string]interface{}
+	if err := result.Content(&resource); err != nil {
+		return fmt.Errorf("failed to parse resource: %w", err)
+	}
+
+	// Update the resource with review information
+	resource["reviewed"] = true
+	resource["reviewTime"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Upsert the updated resource back to the tenant collection
+	_, err = collection.Upsert(resourceKey, resource, &gocb.UpsertOptions{})
 	if err != nil {
-		// Create new review document
-		reviewDoc = ReviewDocument{
-			TenantID:      tenantID,
-			Encounters:    make(map[string]interface{}),
-			Patients:      make(map[string]interface{}),
-			Practitioners: make(map[string]interface{}),
-			Updated:       time.Now().UTC(),
-		}
-	} else {
-		err = res.Content(&reviewDoc)
-		if err != nil {
-			return fmt.Errorf("failed to decode review document: %w", err)
-		}
-
-		// Initialize maps if they don't exist
-		if reviewDoc.Encounters == nil {
-			reviewDoc.Encounters = make(map[string]interface{})
-		}
-		if reviewDoc.Patients == nil {
-			reviewDoc.Patients = make(map[string]interface{})
-		}
-		if reviewDoc.Practitioners == nil {
-			reviewDoc.Practitioners = make(map[string]interface{})
-		}
-	}
-
-	// Add review entry to the appropriate map
-	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
-	reviewEntry := map[string]interface{}{
-		"reviewRequested": true,
-		"reviewTime":      time.Now().UTC().Format(time.RFC3339),
-		"entityType":      resourceType,
-		"entityID":        resourceID,
-	}
-
-	switch resourceType {
-	case "Encounter":
-		reviewDoc.Encounters[entityKey] = reviewEntry
-	case "Patient":
-		reviewDoc.Patients[entityKey] = reviewEntry
-	case "Practitioner":
-		reviewDoc.Practitioners[entityKey] = reviewEntry
-	default:
-		return fmt.Errorf("unsupported resource type: %s", resourceType)
-	}
-	reviewDoc.Updated = time.Now().UTC()
-
-	// Upsert the review document
-	_, err = bucket.DefaultCollection().Upsert(reviewKey, reviewDoc, nil)
-	if err != nil {
-		return fmt.Errorf("failed to save review: %w", err)
+		return fmt.Errorf("failed to update resource review status: %w", err)
 	}
 
 	return nil
+}
+
+// GetTenantCollection is a helper function to get the collection for a tenant
+// This will be implemented in tenant_collections.go
+func GetTenantCollection(tenantID string) (*gocb.Collection, error) {
+	// This is a placeholder - the real implementation is in tenant_collections.go
+	// We'll need to import gocb and implement this properly
+	return nil, fmt.Errorf("GetTenantCollection not implemented yet")
 }
