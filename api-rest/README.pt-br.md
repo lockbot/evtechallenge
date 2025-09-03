@@ -110,6 +110,25 @@ GET /practitioners
 
 ## Sistema de Revisão Multi-Tenant
 
+### Estrutura do Documento de Revisão
+Cada tenant tem um documento de revisão com mapas separados para diferentes tipos de recursos:
+
+```json
+{
+  "tenantId": "tenant-abc",
+  "updated": "2024-01-15T10:30:00Z",
+  "encounters": {
+    "Encounter/456": { "reviewRequested": true, "reviewTime": "..." }
+  },
+  "patients": {
+    "Patient/123": { "reviewRequested": true, "reviewTime": "..." }
+  },
+  "practitioners": {
+    "Practitioner/789": { "reviewRequested": true, "reviewTime": "..." }
+  }
+}
+```
+
 ### Endpoint de Requisição de Revisão
 ```bash
 POST /review-request

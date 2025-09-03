@@ -137,7 +137,7 @@ ENABLE_BUSINESS_METRICS=true
 
 **Implementation**:
 - Tenant identification via `X-Tenant-ID` header
-- Review documents stored as `Review/{tenantID}`
+- Review documents stored as `Review/{tenantID}` with separate maps for each resource type
 - All API endpoints require tenant header
 
 ### Data Modeling Decisions

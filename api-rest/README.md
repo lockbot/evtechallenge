@@ -110,6 +110,25 @@ GET /practitioners
 
 ## Multi-Tenant Review System
 
+### Review Document Structure
+Each tenant has a review document with separate maps for different resource types:
+
+```json
+{
+  "tenantId": "tenant-abc",
+  "updated": "2024-01-15T10:30:00Z",
+  "encounters": {
+    "Encounter/456": { "reviewRequested": true, "reviewTime": "..." }
+  },
+  "patients": {
+    "Patient/123": { "reviewRequested": true, "reviewTime": "..." }
+  },
+  "practitioners": {
+    "Practitioner/789": { "reviewRequested": true, "reviewTime": "..." }
+  }
+}
+```
+
 ### Review Request Endpoint
 ```bash
 POST /review-request

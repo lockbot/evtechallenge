@@ -137,7 +137,7 @@ ENABLE_BUSINESS_METRICS=true
 
 **Implementação**:
 - Identificação de tenant via header `X-Tenant-ID`
-- Documentos de revisão armazenados como `Review/{tenantID}`
+- Documentos de revisão armazenados como `Review/{tenantID}` com mapas separados para cada tipo de recurso
 - Todos os endpoints da API requerem header de tenant
 
 ### Decisões de Modelagem de Dados

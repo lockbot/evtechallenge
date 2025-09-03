@@ -15,9 +15,11 @@ type ReviewRequest struct {
 
 // ReviewDocument represents a tenant's review list
 type ReviewDocument struct {
-	TenantID string                 `json:"tenantId"`
-	Reviews  map[string]interface{} `json:"reviews"` // key: "EntityType/ID", value: review metadata
-	Updated  time.Time              `json:"updated"`
+	TenantID      string                 `json:"tenantId"`
+	Encounters    map[string]interface{} `json:"encounters"`    // key: "Encounter/ID", value: review metadata
+	Patients      map[string]interface{} `json:"patients"`      // key: "Patient/ID", value: review metadata
+	Practitioners map[string]interface{} `json:"practitioners"` // key: "Practitioner/ID", value: review metadata
+	Updated       time.Time              `json:"updated"`
 }
 
 // ReviewInfo contains review status and metadata

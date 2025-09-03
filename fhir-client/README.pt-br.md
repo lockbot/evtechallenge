@@ -144,7 +144,9 @@ Variáveis de ambiente:
 // Adicionar à estrutura ReviewDocument
 type ReviewDocument struct {
     TenantID string                 `json:"tenantId"`
-    Reviews  map[string]interface{} `json:"reviews"`
+    Encounters map[string]interface{} `json:"encounters"`
+    Patients map[string]interface{} `json:"patients"`
+    Practitioners map[string]interface{} `json:"practitioners"`
     FailedIdentifiers []FailedIdentifier `json:"failedIdentifiers,omitempty"`
     Updated  time.Time              `json:"updated"`
 }

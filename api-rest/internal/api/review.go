@@ -36,13 +36,32 @@ func GetReviewInfo(tenantID, resourceType, resourceID string) ReviewInfo {
 	if err != nil {
 		return ReviewInfo{Reviewed: false}
 	}
+
+	// Get the appropriate map based on resource type
+	var reviewData map[string]interface{}
+	switch resourceType {
+	case "Encounter":
+		reviewData = reviewDoc.Encounters
+	case "Patient":
+		reviewData = reviewDoc.Patients
+	case "Practitioner":
+		reviewData = reviewDoc.Practitioners
+	default:
+		return ReviewInfo{Reviewed: false}
+	}
+
+	// If the map is nil, no reviews exist for this resource type
+	if reviewData == nil {
+		return ReviewInfo{Reviewed: false}
+	}
+
 	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
-	reviewData, exists := reviewDoc.Reviews[entityKey]
+	reviewDataItem, exists := reviewData[entityKey]
 	if !exists {
 		return ReviewInfo{Reviewed: false}
 	}
 
-	reviewMap, ok := reviewData.(map[string]interface{})
+	reviewMap, ok := reviewDataItem.(map[string]interface{})
 	if !ok {
 		return ReviewInfo{Reviewed: true, EntityType: resourceType, EntityID: resourceID}
 	}
@@ -81,24 +100,48 @@ func CreateReviewRequest(tenantID, resourceType, resourceID string) error {
 	if err != nil {
 		// Create new review document
 		reviewDoc = ReviewDocument{
-			TenantID: tenantID,
-			Reviews:  make(map[string]interface{}),
-			Updated:  time.Now().UTC(),
+			TenantID:      tenantID,
+			Encounters:    make(map[string]interface{}),
+			Patients:      make(map[string]interface{}),
+			Practitioners: make(map[string]interface{}),
+			Updated:       time.Now().UTC(),
 		}
 	} else {
 		err = res.Content(&reviewDoc)
 		if err != nil {
 			return fmt.Errorf("failed to decode review document: %w", err)
 		}
+
+		// Initialize maps if they don't exist
+		if reviewDoc.Encounters == nil {
+			reviewDoc.Encounters = make(map[string]interface{})
+		}
+		if reviewDoc.Patients == nil {
+			reviewDoc.Patients = make(map[string]interface{})
+		}
+		if reviewDoc.Practitioners == nil {
+			reviewDoc.Practitioners = make(map[string]interface{})
+		}
 	}
 
-	// Add review entry
+	// Add review entry to the appropriate map
 	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
-	reviewDoc.Reviews[entityKey] = map[string]interface{}{
+	reviewEntry := map[string]interface{}{
 		"reviewRequested": true,
 		"reviewTime":      time.Now().UTC().Format(time.RFC3339),
 		"entityType":      resourceType,
 		"entityID":        resourceID,
+	}
+
+	switch resourceType {
+	case "Encounter":
+		reviewDoc.Encounters[entityKey] = reviewEntry
+	case "Patient":
+		reviewDoc.Patients[entityKey] = reviewEntry
+	case "Practitioner":
+		reviewDoc.Practitioners[entityKey] = reviewEntry
+	default:
+		return fmt.Errorf("unsupported resource type: %s", resourceType)
 	}
 	reviewDoc.Updated = time.Now().UTC()
 
