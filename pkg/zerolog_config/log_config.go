@@ -50,8 +50,8 @@ func (clw ConsoleLevelWriter) Write(p []byte) (n int, err error) {
 	return clw.Writer.Write(p)
 }
 
-func startupLoggerWithEnv(elasticsearchURL string, subAddress string) {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+func startupLoggerWithEnv(elasticsearchURL string, subAddress string, logLevel zerolog.Level) {
+	zerolog.SetGlobalLevel(logLevel)
 
 	if elasticsearchURL == "" {
 		// Fallback to console only
@@ -88,12 +88,16 @@ func SetAppPrefix(subAddress string) {
 // StartupWithEnv sets up the logger with the given Elasticsearch URL and subAddress.
 // It returns an error if the subAddress is empty.
 // Run SetAppPrefix before StartupWithEnv.
-func StartupWithEnv(elasticsearchURL string, subAddress string) error {
+func StartupWithEnv(elasticsearchURL string, subAddress string, logLevel string) error {
 	if subAddress == "" {
 		return fmt.Errorf("subAddress is required")
 	}
+	parsedLogLevel, err := zerolog.ParseLevel(logLevel)
+	if err != nil {
+		return fmt.Errorf("invalid log level: %w", err)
+	}
 	startupLoggerOnce.Do(func() {
-		startupLoggerWithEnv(elasticsearchURL, subAddress)
+		startupLoggerWithEnv(elasticsearchURL, subAddress, parsedLogLevel)
 	})
 	return nil
 }

@@ -7,8 +7,8 @@ services:
       - "8091-8097:8091-8097"  # Client-to-node ports
       - "9123:9123"            # Prometheus metrics port
     environment:
-      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
-      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+      - COUCHBASE_ADMINISTRATOR_USERNAME=${COUCHBASE_ADMINISTRATOR_USERNAME:-Administrator}
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=${COUCHBASE_ADMINISTRATOR_PASSWORD:-password}
       - COUCHBASE_HOSTNAME=evtechallenge-db
     volumes:
       - couchbase_data:/opt/couchbase/var
@@ -29,69 +29,15 @@ services:
       evtechallenge-db:
         condition: service_healthy
     environment:
-      - COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
-      - COUCHBASE_ADMINISTRATOR_PASSWORD=password
+      - COUCHBASE_ADMINISTRATOR_USERNAME=${COUCHBASE_ADMINISTRATOR_USERNAME:-Administrator}
+      - COUCHBASE_ADMINISTRATOR_PASSWORD=${COUCHBASE_ADMINISTRATOR_PASSWORD:-password}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
     volumes:
       - couchbase_data:/tmp/db-init-flag
-    command: |
-      sh -c '
-        set -e
-        
-        echo "Waiting for Couchbase UI..."
-        attempts=0; max=13
-        # The unclean test
-        until curl -sf http://evtechallenge-db:8091 > /dev/null; do
-          attempts=$$((attempts+1))
-          if [ $$attempts -ge $$max ]; then echo "ERROR: Couchbase UI not ready"; exit 1; fi
-          echo "Waiting for Couchbase... ($$attempts/$$max)"
-          sleep 3
-        done
-        
-        # Check if database is already initialized
-        if [ -f "/tmp/db-init-flag/initialized" ]; then
-          echo "Database already initialized, skipping setup..."
-          exit 0
-        fi
-        
-        attempts=0; max=7
-        # The clean test
-        until curl -sf http://evtechallenge-db:8091/pools > /dev/null; do
-          attempts=$$((attempts+1))
-          if [ $$attempts -ge $$max ]; then echo "ERROR: Couchbase UI not ready"; exit 1; fi
-          echo "Waiting for Couchbase... ($$attempts/$$max)"
-          sleep 3
-        done
-        echo "Couchbase is ready!"
-
-        # Resolve DB container IP for advertised hostname (no awk)
-        DB_IP=$$(getent hosts evtechallenge-db | head -n1 | cut -d" " -f1 || true)
-        if [ -z "$$DB_IP" ]; then DB_IP=$$(getent ahostsv4 evtechallenge-db | head -n1 | cut -d" " -f1 || true); fi
-        if [ -z "$$DB_IP" ]; then echo "ERROR: Unable to resolve DB IP"; exit 1; fi
-        echo "Using node IP: $$DB_IP"
-
-        echo "Running node-init..."
-        /opt/couchbase/bin/couchbase-cli node-init -c evtechallenge-db --node-init-hostname "$$DB_IP" -u Administrator -p password
-
-        echo "Initializing cluster (data,index,query)..."
-        /opt/couchbase/bin/couchbase-cli cluster-init -c evtechallenge-db \
-          --cluster-username Administrator --cluster-password password \
-          --services data,index,query --cluster-ramsize 512 \
-          --cluster-index-ramsize 256 --index-storage-setting default
-
-        echo "Creating bucket..."
-        /opt/couchbase/bin/couchbase-cli bucket-create -c evtechallenge-db -u Administrator -p password \
-          --bucket evtechallenge --bucket-type couchbase --bucket-ramsize 256 --wait
-
-        echo "Creating application user..."
-        /opt/couchbase/bin/couchbase-cli user-manage -c evtechallenge-db -u Administrator -p password \
-          --set --rbac-username evtechallenge_user --rbac-password password \
-          --roles bucket_full_access[evtechallenge] --auth-domain local
-      
-        # Mark as initialized
-        mkdir -p /tmp/db-init-flag
-        touch /tmp/db-init-flag/initialized
-        echo "Couchbase setup complete and marked as initialized!"
-      '
+      - ./scripts/couchbase-setup.sh:/scripts/couchbase-setup.sh:ro
+    command: ["/bin/sh", "/scripts/couchbase-setup.sh"]
     networks:
       - evtechallenge_network
     restart: "no"
@@ -108,14 +54,16 @@ services:
       evtechallenge-db-setup:
         condition: service_completed_successfully
     environment:
-      - COUCHBASE_URL=${COUCHBASE_URL}
-      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME}
-      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD}
-      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH}
-      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
-      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
-      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - API_PORT=${API_PORT}
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
+      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH:-false}
+      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS:-false}
+      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS:-false}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      - API_PORT=${API_PORT:-8080}
+      - API_LOG_LEVEL=${API_LOG_LEVEL:-info}
     networks:
       - evtechallenge_network
     restart: unless-stopped
@@ -133,15 +81,17 @@ services:
         condition: service_completed_successfully
     environment:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
-      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME}
-      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD}
-      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH}
-      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS}
-      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS}
-      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - FHIR_BASE_URL=${FHIR_BASE_URL}
-      - FHIR_TIMEOUT=${FHIR_TIMEOUT}
-      - FHIR_PORT=${FHIR_PORT}
+      - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
+      - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
+      - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH:-false}
+      - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS:-false}
+      - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS:-false}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      - FHIR_BASE_URL=${FHIR_BASE_URL:-http://hapi.fhir.org/baseR4}
+      - FHIR_TIMEOUT=${FHIR_TIMEOUT:-30s}
+      - FHIR_PORT=${FHIR_PORT:-8081}
+      - FHIR_LOG_LEVEL=${FHIR_LOG_LEVEL:-info}
     networks:
       - evtechallenge_network
     restart: "no"
@@ -155,8 +105,8 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+      - "${ELASTICSEARCH_TRANSPORT_PORT:-9300}:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
@@ -175,7 +125,7 @@ services:
     image: prom/prometheus:v2.54.1
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -196,9 +146,9 @@ services:
     image: grafana/grafana:11.2.0
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana

@@ -3,7 +3,6 @@ package fhir
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/fhir-client/internal/metrics"
@@ -95,7 +94,7 @@ func (c *Client) ingestPractitioners(ctx context.Context) error {
 	for _, practitioner := range practitioners {
 		err = c.ingestPractitioner(ctx, practitioner)
 		if err != nil {
-			log.Warn().Err(err).Str("practitioner_id", practitioner.ID).Msg("Failed to ingest practitioner")
+			log.Debug().Err(err).Str("practitioner_id", practitioner.ID).Msg("Failed to ingest practitioner")
 			skipped++
 			continue
 		}
@@ -129,7 +128,7 @@ func (c *Client) ingestPatients(ctx context.Context) error {
 	for _, patient := range patients {
 		err = c.ingestPatient(ctx, patient)
 		if err != nil {
-			log.Warn().Err(err).Str("patient_id", patient.ID).Msg("Failed to ingest patient")
+			log.Debug().Err(err).Str("patient_id", patient.ID).Msg("Failed to ingest patient")
 			skipped++
 			continue
 		}
@@ -147,43 +146,20 @@ func (c *Client) ingestPatients(ctx context.Context) error {
 
 // ingestEncounter ingests a single encounter resource
 func (c *Client) ingestEncounter(ctx context.Context, resource FHIRResource) error {
-	var err error
-
-	// Build canonical doc key and denormalize lookups
-	docID := fmt.Sprintf("Encounter/%s", resource.ID)
-	patientRefs := c.extractPatientReferences(resource.Data)
-	practitionerRefs := c.extractPractitionerReferences(resource.Data)
-	resource.Data["docId"] = docID
-	resource.Data["resourceType"] = "Encounter"
-	if len(patientRefs) > 0 {
-		resource.Data["subjectPatientId"] = patientRefs[0]
-	}
-	if len(practitionerRefs) > 0 {
-		resource.Data["practitionerIds"] = practitionerRefs
-	}
-
-	// Upsert the encounter
-	start := time.Now()
-	_, err = c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
-	duration := time.Since(start)
-
+	err := c.encounterModel.UpsertEncounter(ctx, resource.ID, resource.Data)
 	if err != nil {
-		metrics.RecordCouchbaseOperation("upsert", "error")
-		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert encounter: %w", err)
 	}
 
-	metrics.RecordCouchbaseOperation("upsert", "success")
-	metrics.RecordCouchbaseOperationDuration("upsert", duration)
-
 	// Extract and sync related resources
-	// use already computed refs
+	patientRefs := c.extractPatientReferences(resource.Data)
+	practitionerRefs := c.extractPractitionerReferences(resource.Data)
 
 	// Sync patient references
 	for _, patientRef := range patientRefs {
 		err = c.syncPatient(ctx, patientRef)
 		if err != nil {
-			log.Warn().Err(err).Str("patient_ref", patientRef).Msg("Failed to sync patient")
+			log.Debug().Err(err).Str("patient_ref", patientRef).Msg("Failed to sync patient")
 		}
 	}
 
@@ -191,7 +167,7 @@ func (c *Client) ingestEncounter(ctx context.Context, resource FHIRResource) err
 	for _, practitionerRef := range practitionerRefs {
 		err = c.syncPractitioner(ctx, practitionerRef)
 		if err != nil {
-			log.Warn().Err(err).Str("practitioner_ref", practitionerRef).Msg("Failed to sync practitioner")
+			log.Debug().Err(err).Str("practitioner_ref", practitionerRef).Msg("Failed to sync practitioner")
 		}
 	}
 
@@ -200,50 +176,18 @@ func (c *Client) ingestEncounter(ctx context.Context, resource FHIRResource) err
 
 // ingestPractitioner ingests a single practitioner resource
 func (c *Client) ingestPractitioner(ctx context.Context, resource FHIRResource) error {
-	var err error
-
-	docID := fmt.Sprintf("Practitioner/%s", resource.ID)
-	resource.Data["docId"] = docID
-	resource.Data["resourceType"] = "Practitioner"
-
-	// Upsert the practitioner
-	start := time.Now()
-	_, err = c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
-	duration := time.Since(start)
-
+	err := c.practitionerModel.UpsertPractitioner(ctx, resource.ID, resource.Data)
 	if err != nil {
-		metrics.RecordCouchbaseOperation("upsert", "error")
-		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert practitioner: %w", err)
 	}
-
-	metrics.RecordCouchbaseOperation("upsert", "success")
-	metrics.RecordCouchbaseOperationDuration("upsert", duration)
-
 	return nil
 }
 
 // ingestPatient ingests a single patient resource
 func (c *Client) ingestPatient(ctx context.Context, resource FHIRResource) error {
-	var err error
-
-	docID := fmt.Sprintf("Patient/%s", resource.ID)
-	resource.Data["docId"] = docID
-	resource.Data["resourceType"] = "Patient"
-
-	// Upsert the patient
-	start := time.Now()
-	_, err = c.bucket.DefaultCollection().Upsert(docID, resource.Data, nil)
-	duration := time.Since(start)
-
+	err := c.patientModel.UpsertPatient(ctx, resource.ID, resource.Data)
 	if err != nil {
-		metrics.RecordCouchbaseOperation("upsert", "error")
-		metrics.RecordCouchbaseOperationDuration("upsert", duration)
 		return fmt.Errorf("failed to upsert patient: %w", err)
 	}
-
-	metrics.RecordCouchbaseOperation("upsert", "success")
-	metrics.RecordCouchbaseOperationDuration("upsert", duration)
-
 	return nil
 }

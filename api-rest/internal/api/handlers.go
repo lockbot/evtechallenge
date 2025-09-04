@@ -1,14 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/couchbase/gocb/v2"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
+	"stealthcompany.com/api-rest/internal/dal"
 	"stealthcompany.com/api-rest/internal/metrics"
 )
 
@@ -127,48 +127,104 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Msg("Invalid tenant ID in request")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
 				"error": err.Error(),
 			})
 			return
 		}
+
 		vars := mux.Vars(r)
 		id := vars["id"]
 		if id == "" {
+			log.Warn().
+				Str("tenant", tenantID).
+				Str("resourceType", resourceType).
+				Msg("Missing resource ID in request")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": "missing id"})
 			return
 		}
-		bucket := GetBucket()
-		if bucket == nil {
+
+		// Create connection and resource model
+		conn, err := dal.NewConnection()
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant", tenantID).
+				Msg("Failed to create database connection")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
+			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
 			return
 		}
-		key := resourceType + "/" + id
-		res, err := bucket.DefaultCollection().Get(key, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
-			return
-		}
+		defer conn.Close()
+
+		resourceModel := dal.NewResourceModel(conn)
+
 		var doc map[string]interface{}
-		err = res.Content(&doc)
+		switch resourceType {
+		case "Encounter":
+			encounterModel := dal.NewEncounterModel(resourceModel)
+			doc, err = encounterModel.GetByID(r.Context(), id)
+		case "Patient":
+			patientModel := dal.NewPatientModel(resourceModel)
+			doc, err = patientModel.GetByID(r.Context(), id)
+		case "Practitioner":
+			practitionerModel := dal.NewPractitionerModel(resourceModel)
+			doc, err = practitionerModel.GetByID(r.Context(), id)
+		default:
+			log.Error().
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Msg("Unsupported resource type")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
+			return
+		}
+
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				log.Debug().
+					Str("id", id).
+					Str("resourceType", resourceType).
+					Str("tenant", tenantID).
+					Msg("Resource not found")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
+				return
+			}
+			log.Error().
+				Err(err).
+				Str("id", id).
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Msg("Failed to retrieve resource")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to decode document"})
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to retrieve resource"})
 			return
 		}
 
 		// Check review status for this tenant
-		reviewInfo := GetReviewInfo(tenantID, resourceType, id)
+		reviewModel := dal.NewReviewModel(resourceModel)
+		reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, id)
 
 		response := ResponseWithReview{
 			Reviewed:   reviewInfo.Reviewed,
 			ReviewTime: reviewInfo.ReviewTime,
 			Data:       doc,
 		}
+
+		log.Info().
+			Str("id", id).
+			Str("resourceType", resourceType).
+			Str("tenant", tenantID).
+			Bool("reviewed", reviewInfo.Reviewed).
+			Msg("Resource retrieved successfully")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -181,85 +237,117 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Msg("Invalid tenant ID in request")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
 				"error": err.Error(),
 			})
 			return
 		}
-		cluster := GetCluster()
-		if cluster == nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
-			return
-		}
-		// Pagination parameters
+
+		// Parse pagination parameters
 		countParam := r.URL.Query().Get("count")
 		pageParam := r.URL.Query().Get("page")
 
-		// Default values
-		count := 100
-		page := 1
-
-		// Parse count parameter
-		if countParam != "" {
-			if v, err := strconv.Atoi(countParam); err == nil && v > 0 && v <= 10000 {
-				count = v
-			}
+		var page, count int
+		var model interface {
+			ValidatePaginationParams(string, string) (int, int, error)
+			List(context.Context, int, int) (*dal.PaginatedResponse, error)
 		}
 
-		// Parse page parameter
-		if pageParam != "" {
-			if v, err := strconv.Atoi(pageParam); err == nil && v > 0 {
-				page = v
-			}
-		}
-
-		// Calculate offset
-		offset := (page - 1) * count
-
-		q := "SELECT META(d).id AS id, d AS resource FROM `" + GetBucketName() + "` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(count) + " OFFSET " + strconv.Itoa(offset)
-		rows, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": resourceType}})
+		// Create connection and resource model
+		conn, err := dal.NewConnection()
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant", tenantID).
+				Msg("Failed to create database connection")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
+			return
+		}
+		defer conn.Close()
+
+		resourceModel := dal.NewResourceModel(conn)
+
+		// Get appropriate model and validate pagination
+		switch resourceType {
+		case "Encounter":
+			encounterModel := dal.NewEncounterModel(resourceModel)
+			page, count, err = encounterModel.ValidatePaginationParams(pageParam, countParam)
+			model = encounterModel
+		case "Patient":
+			patientModel := dal.NewPatientModel(resourceModel)
+			page, count, err = patientModel.ValidatePaginationParams(pageParam, countParam)
+			model = patientModel
+		case "Practitioner":
+			practitionerModel := dal.NewPractitionerModel(resourceModel)
+			page, count, err = practitionerModel.ValidatePaginationParams(pageParam, countParam)
+			model = practitionerModel
+		default:
+			log.Error().
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Msg("Unsupported resource type")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
+			return
+		}
+
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Msg("Failed to validate pagination parameters")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid pagination parameters"})
+			return
+		}
+
+		// Get resources using the model
+		paginatedResponse, err := model.List(r.Context(), page, count)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Int("page", page).
+				Int("count", count).
+				Msg("Failed to list resources")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "query failed"})
 			return
 		}
-		defer rows.Close()
-		var out []QueryRow
-		for rows.Next() {
-			var rr QueryRow
-			err := rows.Row(&rr)
-			if err != nil {
-				continue
-			}
 
-			// Check review status for each resource
-			reviewInfo := GetReviewInfo(tenantID, resourceType, rr.ID)
-			rr.Resource["reviewed"] = reviewInfo.Reviewed
+		// Add review information to each resource
+		reviewModel := dal.NewReviewModel(resourceModel)
+		for i := range paginatedResponse.Data {
+			reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, paginatedResponse.Data[i].ID)
+			// Add review info to the Resource field so it appears in the JSON response
+			paginatedResponse.Data[i].Resource["reviewed"] = reviewInfo.Reviewed
 			if reviewInfo.Reviewed {
-				rr.Resource["reviewTime"] = reviewInfo.ReviewTime
-				rr.Resource["entityType"] = reviewInfo.EntityType
-				rr.Resource["entityID"] = reviewInfo.EntityID
+				paginatedResponse.Data[i].Resource["reviewTime"] = reviewInfo.ReviewTime
+				paginatedResponse.Data[i].Resource["entityType"] = reviewInfo.EntityType
+				paginatedResponse.Data[i].Resource["entityID"] = reviewInfo.EntityID
 			}
-			out = append(out, rr)
 		}
 
-		// Prepare paginated response
-		response := map[string]interface{}{
-			"data": out,
-			"pagination": map[string]interface{}{
-				"page":       page,
-				"count":      count,
-				"offset":     offset,
-				"totalItems": len(out),
-				"hasNext":    len(out) == count,
-			},
-		}
+		log.Info().
+			Str("resourceType", resourceType).
+			Str("tenant", tenantID).
+			Int("page", page).
+			Int("count", count).
+			Int("resultCount", len(paginatedResponse.Data)).
+			Msg("Resources listed successfully")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(paginatedResponse)
 	}
 }
 
@@ -267,69 +355,123 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := GetTenantFromRequest(r)
 	if err != nil {
+		log.Warn().
+			Err(err).
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Msg("Invalid tenant ID in request")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
+
 	if r.Method != http.MethodPost {
+		log.Warn().
+			Str("method", r.Method).
+			Str("tenant", tenantID).
+			Msg("Method not allowed on review request endpoint")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
 		return
 	}
-	bucket := GetBucket()
-	if bucket == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"error": "database not initialized"})
-		return
-	}
+
 	var req ReviewRequest
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant", tenantID).
+			Msg("Failed to decode review request JSON")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+
+	// Validate and normalize entity type
 	entity := strings.ToLower(strings.TrimSpace(req.Entity))
-	var rt string
+	var resourceType string
 	switch entity {
 	case "encounter", "encounters":
-		rt = "Encounter"
+		resourceType = "Encounter"
 	case "patient", "patients":
-		rt = "Patient"
+		resourceType = "Patient"
 	case "practitioner", "practitioners":
-		rt = "Practitioner"
+		resourceType = "Practitioner"
 	default:
+		log.Warn().
+			Str("entity", req.Entity).
+			Str("tenant", tenantID).
+			Msg("Invalid entity type in review request")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid entity"})
 		return
 	}
+
 	if req.ID == "" {
+		log.Warn().
+			Str("tenant", tenantID).
+			Str("resourceType", resourceType).
+			Msg("Missing ID in review request")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "missing id"})
 		return
 	}
 
-	// Create the review request
-	err = CreateReviewRequest(tenantID, rt, req.ID)
+	// Create connection and resource model
+	conn, err := dal.NewConnection()
 	if err != nil {
-		if strings.Contains(err.Error(), "resource not found") {
+		log.Error().
+			Err(err).
+			Str("tenant", tenantID).
+			Msg("Failed to create database connection")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
+		return
+	}
+	defer conn.Close()
+
+	resourceModel := dal.NewResourceModel(conn)
+	reviewModel := dal.NewReviewModel(resourceModel)
+	err = reviewModel.CreateReviewRequest(r.Context(), tenantID, resourceType, req.ID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			log.Debug().
+				Str("id", req.ID).
+				Str("resourceType", resourceType).
+				Str("tenant", tenantID).
+				Msg("Resource not found for review request")
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
 			return
 		}
 
+		log.Error().
+			Err(err).
+			Str("id", req.ID).
+			Str("resourceType", resourceType).
+			Str("tenant", tenantID).
+			Msg("Failed to create review request")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "failed to save review"})
 		return
 	}
 
-	entityKey := rt + "/" + req.ID
-	json.NewEncoder(w).Encode(map[string]string{
+	entityKey := resourceType + "/" + req.ID
+	log.Info().
+		Str("tenant", tenantID).
+		Str("entityKey", entityKey).
+		Msg("Review request created successfully")
+
+	response := map[string]string{
 		"status":   "review requested",
 		"tenant":   tenantID,
 		"entity":   entityKey,
 		"reviewed": "true",
-	})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }

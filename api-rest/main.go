@@ -25,12 +25,13 @@ func main() {
 	// Get configuration from environment
 	elasticsearchURL := getEnvOrDefault("ELASTICSEARCH_URL", "http://elasticsearch:9200")
 	apiPort := getEnvOrDefault("API_PORT", "8080")
+	apiLogLevel := getEnvOrDefault("API_LOG_LEVEL", "info")
 
 	// Set app prefix
 	zerolog_config.SetAppPrefix("api-rest")
 
 	// Initialize zerolog with Elasticsearch
-	zerolog_config.StartupWithEnv(elasticsearchURL, "logs")
+	zerolog_config.StartupWithEnv(elasticsearchURL, "logs", apiLogLevel)
 
 	log.Info().Msg("Starting evtechallenge-api service")
 

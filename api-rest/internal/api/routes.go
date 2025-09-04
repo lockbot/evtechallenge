@@ -3,7 +3,6 @@ package api
 import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rs/zerolog/log"
 	"stealthcompany.com/api-rest/internal/metrics"
 )
 
@@ -14,11 +13,7 @@ func SetupRoutes() *mux.Router {
 	// Add metrics middleware to all routes
 	r.Use(metrics.MetricsMiddleware)
 
-	// Initialize Couchbase (non-fatal if fails; endpoints will report unavailable)
-	err := InitCouchbase()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to initialize Couchbase; endpoints will be unavailable")
-	}
+	// Note: Couchbase connections are now created per-request to avoid globals
 
 	// Routes
 	r.HandleFunc("/", HelloHandler).Methods("GET")

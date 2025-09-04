@@ -66,3 +66,89 @@ func (c *Client) fetchFHIRBundle(ctx context.Context, url string) ([]FHIRResourc
 
 	return resources, nil
 }
+
+// fetchPatientFromAPI fetches a single patient from FHIR API
+func (c *Client) fetchPatientFromAPI(ctx context.Context, patientID string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/Patient/%s", c.fhirBaseURL, patientID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create patient request: %w", err)
+	}
+
+	fetchStart := time.Now()
+	resp, err := c.httpClient.Do(req)
+	fetchDuration := time.Since(fetchStart)
+
+	if err != nil {
+		metrics.RecordFHIRAPICall("Patient", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
+		return nil, fmt.Errorf("failed to fetch patient: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		metrics.RecordFHIRAPICall("Patient", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
+		return nil, fmt.Errorf("FHIR API returned status %d for patient", resp.StatusCode)
+	}
+
+	metrics.RecordFHIRAPICall("Patient", "success")
+	metrics.RecordHTTPFetch("resource_fetch", "success")
+	metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+	metrics.RecordFHIRAPICallDuration("Patient", "individual", fetchDuration)
+
+	var patientData map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&patientData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode patient data: %w", err)
+	}
+
+	return patientData, nil
+}
+
+// fetchPractitionerFromAPI fetches a single practitioner from FHIR API
+func (c *Client) fetchPractitionerFromAPI(ctx context.Context, practitionerID string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/Practitioner/%s", c.fhirBaseURL, practitionerID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create practitioner request: %w", err)
+	}
+
+	fetchStart := time.Now()
+	resp, err := c.httpClient.Do(req)
+	fetchDuration := time.Since(fetchStart)
+
+	if err != nil {
+		metrics.RecordFHIRAPICall("Practitioner", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
+		return nil, fmt.Errorf("failed to fetch practitioner: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		metrics.RecordFHIRAPICall("Practitioner", "error")
+		metrics.RecordHTTPFetch("resource_fetch", "error")
+		metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+		metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
+		return nil, fmt.Errorf("FHIR API returned status %d for practitioner", resp.StatusCode)
+	}
+
+	metrics.RecordFHIRAPICall("Practitioner", "success")
+	metrics.RecordHTTPFetch("resource_fetch", "success")
+	metrics.RecordHTTPFetchDuration("resource_fetch", fetchDuration)
+	metrics.RecordFHIRAPICallDuration("Practitioner", "individual", fetchDuration)
+
+	var practitionerData map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&practitionerData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode practitioner data: %w", err)
+	}
+
+	return practitionerData, nil
+}
