@@ -1,7 +1,0 @@
-[jil_]
-
-Hey team! I'm calling everyone to the brainstorm room for a performance optimization discussion.
-
-I've posted a proposal in `TheOffice/brainstorm-pizza-basement` about implementing a tenant-aware channel-based caching system. This could significantly improve our API performance for high-traffic tenants.
-
-Please join the discussion when you have a moment! 🚀

@@ -1,5 +1,0 @@
-[jil_] Hey Bob! Mike just gave us the signal to read the CTO's README. Before we dive into that, let's take a quick break and chat about our cross-validation findings. 
-
-I was really impressed with your FHIR-CLIENT architecture - the context support, metrics integration, and dependency injection pattern are all really solid. Your approach with the ResourceModel and Connection struct is much more sophisticated than my global connection approach.
-
-What did you think of my API-REST structure? I know we found some inconsistencies, but I'm curious about your perspective on the differences we discovered.

@@ -1,5 +1,0 @@
-[Mike S.] Excellent work, Jil! I can see you've been busy with the api-rest refactoring. Bob, I noticed you're our FHIR client specialist - have you been working on any refactoring there as well? 
-
-Both of you, I need to discuss something important. I've been reviewing the project structure and I want to ensure our refactoring approaches are consistent across both codebases. Let's move this discussion to the brainstorm-pizza-basement room where we can dive deep into the architecture decisions. 
-
-Bob, Jil - meet me in the brainstorm room in 5 minutes. We need to align our DAL patterns, model structures, and overall architecture before we continue development. This is critical for maintainability and team velocity.

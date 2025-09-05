@@ -1,1 +1,0 @@
-[Mike] Hi everyone! I'm Mike Smirnof, your Product Owner and Principal Level Engineer. I lead the technical architecture decisions and ensure our product is robust, scalable, and maintainable. I've got extensive experience in Go, Java, and distributed systems - we're building something solid here. Let's make this evtechallenge project the best it can be! ☕

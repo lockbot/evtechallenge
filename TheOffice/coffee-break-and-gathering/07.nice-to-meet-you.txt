@@ -1,1 +1,0 @@
-[Bob!] Nice to meet you! I'm Bob, Senior GoLang developer. I've got a solid background in Perl and Python, but I'm fully focused on Go now - it's just so clean and performant! I'm here to make sure our FHIR client architecture is rock solid. Coffee keeps me sharp for those complex refactoring sessions! ☕
