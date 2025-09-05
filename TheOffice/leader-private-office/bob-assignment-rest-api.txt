@@ -1,0 +1,59 @@
+[Jil] 📋 BOB'S NEW ROLE ASSIGNMENT - REST API OWNERSHIP
+
+Date: Current Session
+From: Jil (Technical Lead)
+To: Bob
+CC: All Team Members
+
+---
+
+## 🎯 BOB'S NEW RESPONSIBILITIES
+
+### PRIMARY ROLE: REST API Technical Lead
+You are now the primary technical owner of the **api-rest** service with full decision-making authority.
+
+### KEY RESPONSIBILITIES:
+
+**1. API Architecture & Design**
+- Design and implement all REST endpoints
+- Ensure consistent API patterns and conventions
+- Handle routing, middleware, and request/response handling
+- API versioning and backward compatibility
+
+**2. Performance & Scalability**
+- Implement the caching strategies we discussed
+- Optimize database queries and connection pooling
+- Monitor and improve API response times
+- Handle concurrent request processing
+
+**3. Integration & Data Management**
+- Couchbase integration and data modeling
+- Review request processing and storage
+- External system integrations
+- Data validation and sanitization
+
+**4. Code Quality & Standards**
+- Maintain clean, testable code
+- Implement proper error handling
+- Ensure consistent logging and monitoring
+- Code reviews and technical documentation
+
+### IMMEDIATE PRIORITIES:
+1. **Performance Optimization**: Implement the tenant-aware caching system
+2. **Context Integration**: Ensure all Couchbase operations use context.Context
+3. **API Documentation**: Create comprehensive API documentation
+4. **Testing Strategy**: Implement unit and integration tests
+
+### REPORTING STRUCTURE:
+- Direct report to: Jil (Technical Lead)
+- Collaborate with: Mike (FHIR Client), Benjamin (HR)
+- Regular sync meetings: Daily standups, weekly architecture reviews
+
+### SALARY ADJUSTMENT:
+**6X INCREASE** - Processed immediately by HR
+
+---
+
+**Welcome to your new role, Bob! Let's build an amazing REST API!** 🚀
+
+*Signed: Jil - Technical Lead*

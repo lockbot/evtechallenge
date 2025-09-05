@@ -36,8 +36,8 @@ services:
       - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
     volumes:
       - couchbase_data:/tmp/db-init-flag
-      - ./scripts/evt-db-setup.sh:/scripts/evt-db-setup.sh:ro
-    command: ["/bin/sh", "/scripts/evt-db-setup.sh"]
+      - ./scripts/couchbase-setup.sh:/scripts/couchbase-setup.sh:ro
+    command: ["/bin/bash", "/scripts/couchbase-setup.sh"]
     networks:
       - evtechallenge_network
     restart: "no"

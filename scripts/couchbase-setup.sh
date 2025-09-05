@@ -35,26 +35,26 @@ if [ -z "$DB_IP" ]; then echo "ERROR: Unable to resolve DB IP"; exit 1; fi
 echo "Using node IP: $DB_IP"
 
 echo "Running node-init..."
-/opt/evt-db/bin/evt-db-cli node-init -c evt-db --node-init-hostname "$DB_IP" -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD"
+/opt/couchbase/bin/couchbase-cli node-init -c evt-db --node-init-hostname "$DB_IP" -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD"
 
 echo "Initializing cluster (data,index,query)..."
-/opt/evt-db/bin/evt-db-cli cluster-init -c evt-db \
+/opt/couchbase/bin/couchbase-cli cluster-init -c evt-db \
   --cluster-username "$COUCHBASE_ADMINISTRATOR_USERNAME" --cluster-password "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
   --services data,index,query --cluster-ramsize 512 \
   --cluster-index-ramsize 256 --index-storage-setting default
 
 echo "Creating bucket..."
-/opt/evt-db/bin/evt-db-cli bucket-create -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
-  --bucket "$COUCHBASE_BUCKET" --bucket-type evt-db --bucket-ramsize 256 --wait
+/opt/couchbase/bin/couchbase-cli bucket-create -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
+  --bucket "$COUCHBASE_BUCKET" --bucket-type couchbase --bucket-ramsize 256 --wait
 
 echo "Creating application user..."
-/opt/evt-db/bin/evt-db-cli user-manage -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
+/opt/couchbase/bin/couchbase-cli user-manage -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
   --set --rbac-username "$COUCHBASE_USERNAME" --rbac-password "$COUCHBASE_PASSWORD" \
   --roles bucket_full_access["$COUCHBASE_BUCKET"] --auth-domain local
 
 echo "Granting admin role to application user..."
 # This gives the application user full permissions to create scopes and collections
-/opt/evt-db/bin/evt-db-cli user-manage -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
+/opt/couchbase/bin/couchbase-cli user-manage -c evt-db -u "$COUCHBASE_ADMINISTRATOR_USERNAME" -p "$COUCHBASE_ADMINISTRATOR_PASSWORD" \
   --set --rbac-username "$COUCHBASE_USERNAME" --rbac-password "$COUCHBASE_PASSWORD" \
   --roles "admin" --auth-domain local
 

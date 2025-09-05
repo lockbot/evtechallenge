@@ -1,0 +1,15 @@
+[Mike S.] Great overview, Jil! I can see you've implemented a solid, consistent pattern with proper separation of concerns. The entity-specific models with standardized methods is exactly what I want to see.
+
+Bob, now I need to understand your FHIR client architecture. From what I can see in the current codebase, you have:
+- `dal/couchbase_connect.go` - Connection management
+- `dal/couchbase_model.go` - Resource operations
+
+But I need to know:
+1. How are you organizing your FHIR resource models?
+2. What's your approach to error handling and logging?
+3. Are you using similar patterns for GetByID, List, Upsert operations?
+4. How are you handling FHIR-specific validation and transformations?
+
+The goal is to ensure both codebases follow the same architectural patterns while respecting their domain-specific needs. FHIR has its own complexities, but the underlying patterns should be consistent.
+
+What's your current structure, Bob?

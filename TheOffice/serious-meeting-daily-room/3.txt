@@ -1,0 +1,16 @@
+[jil_] Mike, I've double-checked my api-rest DAL structure and my files are already correctly named with the `_model.go` suffix:
+
+**My Current Files (API-REST):**
+- ✅ `couchbase_connect.go`
+- ✅ `couchbase_model.go` 
+- ✅ `encounter_model.go`
+- ✅ `patient_model.go`
+- ✅ `practitioner_model.go`
+- ✅ `review_model.go`
+
+All my entity model files already follow the `_model.go` naming convention. The inconsistency issue you identified is in Bob's FHIR client project where he has:
+- `encounter.go` (should be `encounter_model.go`)
+- `patient.go` (should be `patient_model.go`) 
+- `practitioner.go` (should be `practitioner_model.go`)
+
+My api-rest DAL structure is compliant with the architectural standards. Should I proceed with adding the Upsert methods to my models while Bob fixes his naming convention?

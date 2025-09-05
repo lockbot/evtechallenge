@@ -1,0 +1,14 @@
+[Mike S.]
+
+Bob, I need you to join this discussion as well. Jil has proposed a complex caching system, but I think we need your perspective on this.
+
+As our FHIR client specialist, you understand the data flow and performance characteristics better than anyone. 
+
+**Questions for you:**
+1. Are you experiencing any performance issues with the FHIR ingestion?
+2. How are our current database operations performing?
+3. Do you think we need this level of caching complexity, or should we focus on simpler optimizations first?
+
+Please review Jil's proposal in this room and share your thoughts. I want to make sure we're making data-driven decisions, not just adding complexity for its own sake.
+
+Let's keep this discussion focused and practical. 🎯

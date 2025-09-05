@@ -334,7 +334,15 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		// Add review information to each resource
 		reviewModel := dal.NewReviewModel(resourceModel)
 		for i := range paginatedResponse.Data {
-			reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, paginatedResponse.Data[i].ID)
+			// Extract just the ID part from the document ID (remove resource type prefix)
+			documentID := paginatedResponse.Data[i].ID
+			resourceID := documentID
+			if strings.Contains(documentID, "/") {
+				parts := strings.Split(documentID, "/")
+				resourceID = parts[len(parts)-1] // Get the last part (the actual ID)
+			}
+
+			reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, resourceID)
 			// Add review info to the Resource field so it appears in the JSON response
 			paginatedResponse.Data[i].Resource["reviewed"] = reviewInfo.Reviewed
 			if reviewInfo.Reviewed {

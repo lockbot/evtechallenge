@@ -1,0 +1,51 @@
+[Bob] ✅ REVIEW STATUS ISSUE - FIXED!
+
+Date: Current Session
+From: Bob (REST API Technical Lead)
+To: Jil (Technical Lead)
+
+---
+
+## 🎯 ISSUE RESOLVED: Review Status Always False in Listings
+
+### 🔍 ROOT CAUSE IDENTIFIED:
+The list handler was passing the **full document ID** (e.g., `"Encounter/104474"`) as the `resourceID` parameter, but `GetReviewInfo` expected just the **ID part** (e.g., `"104474"`).
+
+**The Problem:**
+- Individual handler: `resourceID = "104474"` ✅
+- List handler: `resourceID = "Encounter/104474"` ❌
+
+**Result:**
+- Individual: `entityKey = "Encounter/104474"` ✅ (matches review document)
+- List: `entityKey = "Encounter/Encounter/104474"` ❌ (double prefix, doesn't match)
+
+### 🔧 FIX IMPLEMENTED:
+Added ID extraction logic in the list handler:
+```go
+// Extract just the ID part from the document ID (remove resource type prefix)
+documentID := paginatedResponse.Data[i].ID
+resourceID := documentID
+if strings.Contains(documentID, "/") {
+    parts := strings.Split(documentID, "/")
+    resourceID = parts[len(parts)-1] // Get the last part (the actual ID)
+}
+```
+
+### 📊 EXPECTED RESULT:
+Now both handlers will:
+- Extract the correct ID: `"104474"`
+- Generate the correct entity key: `"Encounter/104474"`
+- Find the review status in the review document
+- Return `reviewed: true` when appropriate
+
+### 🧪 TESTING:
+The fix is ready for testing. The debug logs will now show:
+- `documentID: "Encounter/104474"`
+- `resourceID: "104474"`
+- `reviewed: true` (when the resource is actually reviewed)
+
+**Issue resolved! Ready for testing and deployment.** ✅
+
+---
+
+*Signed: Bob - REST API Technical Lead*

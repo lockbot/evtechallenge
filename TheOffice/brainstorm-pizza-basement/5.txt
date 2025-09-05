@@ -1,0 +1,28 @@
+[Mike S.] Perfect, Bob. Let me give you both the architectural standards we need to follow across both codebases.
+
+**UNIFIED ARCHITECTURE STANDARDS:**
+
+**1. DAL Structure (Both Projects):**
+- `dal/couchbase_connect.go` - Connection management only
+- `dal/couchbase_model.go` - Base model with common operations
+- Entity-specific models: `dal/{entity}_model.go` (e.g., `encounter_model.go`, `patient_model.go`)
+
+**2. Standard Model Methods (All Entities):**
+- `GetByID(ctx, id) (Entity, error)`
+- `List(ctx, params) ([]Entity, PaginationInfo, error)`
+- `Upsert(ctx, entity) error`
+- `ValidatePaginationParams(params) error`
+
+**3. Error Handling:**
+- Use structured logging with zerolog
+- Debug: Detailed operations
+- Info: Success operations
+- Warn: Validation issues
+- Error: Failures with context
+
+**4. Code Style:**
+- Max 4 tabs indentation
+- Early returns to reduce nesting
+- Consistent error propagation
+
+Bob, I need you to refactor your FHIR client to match Jil's patterns. Create entity-specific models for your FHIR resources. What FHIR resources are you currently working with?

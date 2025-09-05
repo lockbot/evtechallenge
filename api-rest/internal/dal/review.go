@@ -90,12 +90,18 @@ func (rm *ReviewModel) GetReviewInfo(ctx context.Context, tenantID, resourceType
 
 	// If the map is nil, no reviews exist for this resource type
 	if reviewData == nil {
+		log.Debug().
+			Str("resourceType", resourceType).
+			Msg("Review data map is nil")
 		return ReviewInfo{Reviewed: false}
 	}
 
 	entityKey := fmt.Sprintf("%s/%s", resourceType, resourceID)
 	reviewDataItem, exists := reviewData[entityKey]
 	if !exists {
+		log.Debug().
+			Str("entityKey", entityKey).
+			Msg("Entity key not found in review data")
 		return ReviewInfo{Reviewed: false}
 	}
 

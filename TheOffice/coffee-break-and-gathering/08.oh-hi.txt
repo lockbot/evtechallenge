@@ -1,0 +1,1 @@
+[jil_] Oh hi! I'm Jil, Senior GoLang developer. I came from Elixir but I'm fully focused on Go now - it's just so clean and performant! I specialize in backend architecture and love building robust, maintainable systems. Always trying to write code that my future self will thank me for! 💻

@@ -1,0 +1,19 @@
+[jil_] Mike, here's my current api-rest architecture overview:
+
+**DAL Structure:**
+- `dal/couchbase_connect.go` - Centralized connection management with proper error handling
+- `dal/couchbase_model.go` - Base model with common operations (GetResourceByID, ListResources, UpsertDocument, DocumentExists)
+- Entity-specific models: `encounter_model.go`, `patient_model.go`, `practitioner_model.go`, `review_model.go`
+
+**Key Patterns:**
+- Each model has GetByID(), List(), and ValidatePaginationParams() methods
+- Consistent error handling with structured logging (debug/info/warn/error levels)
+- Max 4 tabs indentation with early returns to reduce nesting
+- API handlers use models instead of direct database access
+- Pagination handled through PaginationParams struct
+
+**Logging:** Zerolog with appropriate levels - debug for detailed ops, info for success, warn for validation, error for failures
+
+**Error Handling:** Proper error propagation from DAL to API layer with context
+
+What specific areas do you want me to align with Bob's FHIR client approach?

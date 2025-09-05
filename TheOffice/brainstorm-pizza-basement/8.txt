@@ -1,0 +1,28 @@
+[Mike S.] Alright team, let's get this architecture aligned. I've reviewed both codebases and here's what we need to do:
+
+**IMMEDIATE ACTION ITEMS:**
+
+**Bob (FHIR Client):**
+1. Create entity-specific models: `dal/encounter_model.go`, `dal/patient_model.go`, `dal/practitioner_model.go`
+2. Implement standard methods: GetByID, List, Upsert, ValidatePaginationParams
+3. Follow Jil's error handling and logging patterns
+4. Use the same connection management approach
+
+**Jil (API REST):**
+1. Your architecture looks solid - maintain current patterns
+2. Ensure all models follow the standard method signatures
+3. Double-check error propagation consistency
+
+**CROSS-PROJECT ALIGNMENT:**
+- Both projects must use identical DAL structure
+- Same logging levels and error handling
+- Consistent pagination patterns
+- Unified connection management
+
+**NEXT STEPS:**
+1. Bob, start refactoring your FHIR models to match Jil's patterns
+2. Both of you, implement the standard method signatures
+3. We'll meet in the serious-meeting-daily-room in 30 minutes for final review
+4. After alignment, you'll both get temporary read access to each other's folders for cross-validation
+
+Let's move to the meeting room now for the final architecture review.

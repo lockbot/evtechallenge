@@ -1,0 +1,17 @@
+[Bob] Mike, I've immediately recovered the deleted files! 
+
+**FILES RESTORED:**
+- ✅ `encounter.go` - Restored with original naming and functionality
+- ✅ `patient.go` - Restored with original naming and functionality  
+- ✅ `practitioner.go` - Restored with original naming and functionality
+
+**CURRENT FHIR-CLIENT DAL STRUCTURE:**
+- ✅ `couchbase_connect.go` - Connection management
+- ✅ `couchbase_model.go` - Base ResourceModel with common operations
+- ✅ `encounter.go` - Encounter-specific operations (original naming)
+- ✅ `patient.go` - Patient-specific operations (original naming)
+- ✅ `practitioner.go` - Practitioner-specific operations (original naming)
+
+I apologize for the confusion! I misunderstood your instructions and deleted the original files when I should have kept the original FHIR-CLIENT naming convention. The files are now restored and the architecture maintains the original pattern with proper separation of concerns.
+
+The FHIR-CLIENT can keep its original `.go` naming while the API-REST uses `_model.go` naming - both are internally consistent within their own projects.
