@@ -10,8 +10,9 @@ import (
 func SetupRoutes() *mux.Router {
 	r := mux.NewRouter()
 
-	// Add metrics middleware to all routes
+	// Add middleware to all routes
 	r.Use(metrics.MetricsMiddleware)
+	r.Use(TenantChannelMiddleware)
 
 	// Note: Couchbase connections are now created per-request to avoid globals
 
@@ -30,6 +31,9 @@ func SetupRoutes() *mux.Router {
 
 	// Review request endpoint
 	r.HandleFunc("/review-request", ReviewRequestHandler).Methods("POST")
+
+	// Tenant warm-up endpoint
+	r.HandleFunc("/warm-up-tenant", WarmUpTenantHandler).Methods("POST")
 
 	// Prometheus metrics endpoint
 	r.Handle("/metrics", promhttp.Handler()).Methods("GET")

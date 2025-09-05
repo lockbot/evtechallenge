@@ -7,19 +7,36 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api-rest/internal/metrics"
 )
 
 // TenantChannels represents the channel-based concurrency system for a tenant
 type TenantChannels struct {
-	getEncounterCh      chan struct{ entity, id string }
-	listEncountersCh    chan struct{ entity, id string }
-	getPatientCh        chan struct{ entity, id string }
-	listPatientsCh      chan struct{ entity, id string }
-	getPractitionerCh   chan struct{ entity, id string }
-	listPractitionersCh chan struct{ entity, id string }
-	reviewCh            chan struct{ entity, id string }
+	getEncounterCh      chan RequestMessage
+	listEncountersCh    chan RequestMessage
+	getPatientCh        chan RequestMessage
+	listPatientsCh      chan RequestMessage
+	getPractitionerCh   chan RequestMessage
+	listPractitionersCh chan RequestMessage
+	reviewCh            chan RequestMessage
 	cooldownCh          chan struct{}
+	timerResetCh        chan struct{}
+	responsePool        *ResponsePool
+}
+
+// RequestMessage contains the request data and response channel key
+type RequestMessage struct {
+	TenantID    string
+	Entity      string
+	ID          string
+	ResponseKey string
+	Page        int
+	Count       int
+}
+
+// ResponseMessage contains the response data
+type ResponseMessage struct {
+	Data  interface{}
+	Error error
 }
 
 var tenantChannels = make(map[string]*TenantChannels)
@@ -46,14 +63,16 @@ func WarmUpTenantHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create channels for this tenant
 	channels := &TenantChannels{
-		getEncounterCh:      make(chan struct{ entity, id string }),
-		listEncountersCh:    make(chan struct{ entity, id string }),
-		getPatientCh:        make(chan struct{ entity, id string }),
-		listPatientsCh:      make(chan struct{ entity, id string }),
-		getPractitionerCh:   make(chan struct{ entity, id string }),
-		listPractitionersCh: make(chan struct{ entity, id string }),
-		reviewCh:            make(chan struct{ entity, id string }),
+		getEncounterCh:      make(chan RequestMessage),
+		listEncountersCh:    make(chan RequestMessage),
+		getPatientCh:        make(chan RequestMessage),
+		listPatientsCh:      make(chan RequestMessage),
+		getPractitionerCh:   make(chan RequestMessage),
+		listPractitionersCh: make(chan RequestMessage),
+		reviewCh:            make(chan RequestMessage),
 		cooldownCh:          make(chan struct{}),
+		timerResetCh:        make(chan struct{}),
+		responsePool:        NewResponsePool(5),
 	}
 
 	tenantChannels[tenantID] = channels
@@ -61,11 +80,8 @@ func WarmUpTenantHandler(w http.ResponseWriter, r *http.Request) {
 	// Start worker goroutine
 	go channels.processMessages()
 
-	// Start 10-minute timer goroutine
-	go func() {
-		time.Sleep(10 * time.Minute)
-		channels.cooldownCh <- struct{}{}
-	}()
+	// Start timer management goroutine
+	go channels.manageTimer()
 
 	log.Info().
 		Str("tenant", tenantID).
@@ -79,74 +95,21 @@ func WarmUpTenantHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Worker function that processes messages from channels
-func (tc *TenantChannels) processMessages() {
-	defer func() {
-		// Graceful shutdown - close all channels
-		close(tc.getEncounterCh)
-		close(tc.listEncountersCh)
-		close(tc.getPatientCh)
-		close(tc.listPatientsCh)
-		close(tc.getPractitionerCh)
-		close(tc.listPractitionersCh)
-		close(tc.reviewCh)
-		close(tc.cooldownCh)
-	}()
+// manageTimer handles the 10-minute timer with reset capability
+func (tc *TenantChannels) manageTimer() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case _, ok := <-tc.getEncounterCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process encounter request
-			metrics.RecordChannelOperation("get_encounter", time.Since(start))
-		case _, ok := <-tc.listEncountersCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process list encounters request
-			metrics.RecordChannelOperation("list_encounters", time.Since(start))
-		case _, ok := <-tc.getPatientCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process patient request
-			metrics.RecordChannelOperation("get_patient", time.Since(start))
-		case _, ok := <-tc.listPatientsCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process list patients request
-			metrics.RecordChannelOperation("list_patients", time.Since(start))
-		case _, ok := <-tc.getPractitionerCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process practitioner request
-			metrics.RecordChannelOperation("get_practitioner", time.Since(start))
-		case _, ok := <-tc.listPractitionersCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process list practitioners request
-			metrics.RecordChannelOperation("list_practitioners", time.Since(start))
-		case _, ok := <-tc.reviewCh:
-			if !ok {
-				continue
-			}
-			start := time.Now()
-			// Process review request
-			metrics.RecordChannelOperation("review_request", time.Since(start))
-		case <-tc.cooldownCh:
-			// Handle cooldown signal - stop goroutine
+		case <-ticker.C:
+			// Timer expired - send cooldown signal
+			tc.cooldownCh <- struct{}{}
 			return
+		case <-tc.timerResetCh:
+			// Reset timer - create new ticker
+			ticker.Stop()
+			ticker = time.NewTicker(10 * time.Minute)
 		}
 	}
 }
@@ -157,4 +120,14 @@ func GetTenantChannels(tenantID string) (*TenantChannels, bool) {
 	defer channelsMutex.RUnlock()
 	channels, exists := tenantChannels[tenantID]
 	return channels, exists
+}
+
+// ResetTimer resets the 10-minute timer for a tenant
+func (tc *TenantChannels) ResetTimer() {
+	select {
+	case tc.timerResetCh <- struct{}{}:
+		// Timer reset successfully
+	default:
+		// Channel might be closed, ignore
+	}
 }

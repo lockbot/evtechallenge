@@ -1,15 +1,14 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api-rest/internal/dal"
 	"stealthcompany.com/api-rest/internal/metrics"
 )
 
@@ -126,7 +125,6 @@ func AllGoodHandler(w http.ResponseWriter, r *http.Request) {
 // GetResourceByIDHandler handles GET /{resource}/{id}
 func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
 			log.Warn().
@@ -153,95 +151,56 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			return
 		}
 
-		// Create connection and resource model
-		conn, err := dal.GetConnOrGenConn()
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("tenant", tenantID).
-				Msg("Failed to create database connection")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
-			return
-		}
-		defer dal.ReturnConnection(conn) // Return connection to pool
+		// Check if tenant is warmed up and send to channel
+		if channels, exists := GetTenantChannels(tenantID); exists {
+			// Get response channel from pool
+			respCh := channels.responsePool.GetChannel()
+			responseKey := respCh.key
 
-		resourceModel := dal.NewResourceModel(conn)
-
-		var doc map[string]interface{}
-		switch resourceType {
-		case "Encounter":
-			encounterModel := dal.NewEncounterModel(resourceModel)
-			doc, err = encounterModel.GetByID(r.Context(), id)
-		case "Patient":
-			patientModel := dal.NewPatientModel(resourceModel)
-			doc, err = patientModel.GetByID(r.Context(), id)
-		case "Practitioner":
-			practitionerModel := dal.NewPractitionerModel(resourceModel)
-			doc, err = practitionerModel.GetByID(r.Context(), id)
-		default:
-			log.Error().
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Msg("Unsupported resource type")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
-			return
-		}
-
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				log.Debug().
-					Str("id", id).
-					Str("resourceType", resourceType).
-					Str("tenant", tenantID).
-					Msg("Resource not found")
-				w.WriteHeader(http.StatusNotFound)
-				json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
+			// Send request to appropriate channel
+			switch resourceType {
+			case "Encounter":
+				channels.getEncounterCh <- RequestMessage{tenantID, resourceType, id, responseKey, 0, 0}
+			case "Patient":
+				channels.getPatientCh <- RequestMessage{tenantID, resourceType, id, responseKey, 0, 0}
+			case "Practitioner":
+				channels.getPractitionerCh <- RequestMessage{tenantID, resourceType, id, responseKey, 0, 0}
+			default:
+				channels.responsePool.ReturnChannel(respCh)
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
 				return
 			}
-			log.Error().
-				Err(err).
-				Str("id", id).
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Msg("Failed to retrieve resource")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to retrieve resource"})
-			return
+
+			// Wait for response from channel
+			select {
+			case response := <-respCh.ch:
+				if response.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					json.NewEncoder(w).Encode(map[string]string{"error": response.Error.Error()})
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(response.Data)
+			case <-time.After(30 * time.Second):
+				http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			}
+		} else {
+			// Tenant not warmed up
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   "Tenant not warmed up",
+				"message": "Please call /warm-up-tenant first",
+			})
 		}
-
-		// Check review status for this tenant
-		reviewModel := dal.NewReviewModel(resourceModel)
-		reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, id)
-
-		response := ResponseWithReview{
-			Reviewed:   reviewInfo.Reviewed,
-			ReviewTime: reviewInfo.ReviewTime,
-			Data:       doc,
-		}
-
-		log.Info().
-			Str("id", id).
-			Str("resourceType", resourceType).
-			Str("tenant", tenantID).
-			Bool("reviewed", reviewInfo.Reviewed).
-			Msg("Resource retrieved successfully")
-
-		// Record performance metrics
-		duration := time.Since(start)
-		metrics.RecordHTTPRequest(r.Method, "/"+strings.ToLower(resourceType)+"/{id}", http.StatusOK, duration)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
 	}
 }
 
 // ListResourcesHandler handles GET /{resource}
 func ListResourcesHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
 			log.Warn().
@@ -260,119 +219,69 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		countParam := r.URL.Query().Get("count")
 		pageParam := r.URL.Query().Get("page")
 
-		var page, count int
-		var model interface {
-			ValidatePaginationParams(string, string) (int, int, error)
-			List(context.Context, int, int) (*dal.PaginatedResponse, error)
+		// Simple pagination validation (default values)
+		page := 1
+		count := 10
+		if pageParam != "" {
+			if p, err := strconv.Atoi(pageParam); err == nil && p > 0 {
+				page = p
+			}
+		}
+		if countParam != "" {
+			if c, err := strconv.Atoi(countParam); err == nil && c > 0 && c <= 100 {
+				count = c
+			}
 		}
 
-		// Create connection and resource model
-		conn, err := dal.GetConnOrGenConn()
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("tenant", tenantID).
-				Msg("Failed to create database connection")
+		// Check if tenant is warmed up and send to channel
+		if channels, exists := GetTenantChannels(tenantID); exists {
+			// Get response channel from pool
+			respCh := channels.responsePool.GetChannel()
+			responseKey := respCh.key
+
+			// Send request to appropriate channel
+			switch resourceType {
+			case "Encounter":
+				channels.listEncountersCh <- RequestMessage{tenantID, resourceType, "", responseKey, page, count}
+			case "Patient":
+				channels.listPatientsCh <- RequestMessage{tenantID, resourceType, "", responseKey, page, count}
+			case "Practitioner":
+				channels.listPractitionersCh <- RequestMessage{tenantID, resourceType, "", responseKey, page, count}
+			default:
+				channels.responsePool.ReturnChannel(respCh)
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
+				return
+			}
+
+			// Wait for response from channel
+			select {
+			case response := <-respCh.ch:
+				if response.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					json.NewEncoder(w).Encode(map[string]string{"error": response.Error.Error()})
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(response.Data)
+			case <-time.After(30 * time.Second):
+				http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			}
+		} else {
+			// Tenant not warmed up
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
-			return
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   "Tenant not warmed up",
+				"message": "Please call /warm-up-tenant first",
+			})
 		}
-		defer dal.ReturnConnection(conn) // Return connection to pool
-
-		resourceModel := dal.NewResourceModel(conn)
-
-		// Get appropriate model and validate pagination
-		switch resourceType {
-		case "Encounter":
-			encounterModel := dal.NewEncounterModel(resourceModel)
-			page, count, err = encounterModel.ValidatePaginationParams(pageParam, countParam)
-			model = encounterModel
-		case "Patient":
-			patientModel := dal.NewPatientModel(resourceModel)
-			page, count, err = patientModel.ValidatePaginationParams(pageParam, countParam)
-			model = patientModel
-		case "Practitioner":
-			practitionerModel := dal.NewPractitionerModel(resourceModel)
-			page, count, err = practitionerModel.ValidatePaginationParams(pageParam, countParam)
-			model = practitionerModel
-		default:
-			log.Error().
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Msg("Unsupported resource type")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "unsupported resource type"})
-			return
-		}
-
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Msg("Failed to validate pagination parameters")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid pagination parameters"})
-			return
-		}
-
-		// Get resources using the model
-		paginatedResponse, err := model.List(r.Context(), page, count)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Int("page", page).
-				Int("count", count).
-				Msg("Failed to list resources")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "query failed"})
-			return
-		}
-
-		// Add review information to each resource
-		reviewModel := dal.NewReviewModel(resourceModel)
-		for i := range paginatedResponse.Data {
-			// Extract just the ID part from the document ID (remove resource type prefix)
-			documentID := paginatedResponse.Data[i].ID
-			resourceID := documentID
-			if strings.Contains(documentID, "/") {
-				parts := strings.Split(documentID, "/")
-				resourceID = parts[len(parts)-1] // Get the last part (the actual ID)
-			}
-
-			reviewInfo := reviewModel.GetReviewInfo(r.Context(), tenantID, resourceType, resourceID)
-			// Add review info to the Resource field so it appears in the JSON response
-			paginatedResponse.Data[i].Resource["reviewed"] = reviewInfo.Reviewed
-			if reviewInfo.Reviewed {
-				paginatedResponse.Data[i].Resource["reviewTime"] = reviewInfo.ReviewTime
-				paginatedResponse.Data[i].Resource["entityType"] = reviewInfo.EntityType
-				paginatedResponse.Data[i].Resource["entityID"] = reviewInfo.EntityID
-			}
-		}
-
-		log.Info().
-			Str("resourceType", resourceType).
-			Str("tenant", tenantID).
-			Int("page", page).
-			Int("count", count).
-			Int("resultCount", len(paginatedResponse.Data)).
-			Msg("Resources listed successfully")
-
-		// Record performance metrics
-		duration := time.Since(start)
-		metrics.RecordHTTPRequest(r.Method, "/"+strings.ToLower(resourceType), http.StatusOK, duration)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(paginatedResponse)
 	}
 }
 
 // ReviewRequestHandler handles POST /review-request
 func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
 	tenantID, err := GetTenantFromRequest(r)
 	if err != nil {
 		log.Warn().
@@ -439,63 +348,42 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create connection and resource model
-	conn, err := dal.GetConnOrGenConn()
-	if err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant", tenantID).
-			Msg("Failed to create database connection")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
-		return
-	}
-	defer dal.ReturnConnection(conn) // Return connection to pool
+	// Check if tenant is warmed up and send to channel
+	if channels, exists := GetTenantChannels(tenantID); exists {
+		// Get response channel from pool
+		respCh := channels.responsePool.GetChannel()
+		responseKey := respCh.key
 
-	resourceModel := dal.NewResourceModel(conn)
-	reviewModel := dal.NewReviewModel(resourceModel)
-	err = reviewModel.CreateReviewRequest(r.Context(), tenantID, resourceType, req.ID)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			log.Debug().
-				Str("id", req.ID).
-				Str("resourceType", resourceType).
-				Str("tenant", tenantID).
-				Msg("Resource not found for review request")
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
-			return
+		// Send request to review channel with concatenated entity/ID
+		entityID := resourceType + "/" + req.ID
+		channels.reviewCh <- RequestMessage{tenantID, resourceType, entityID, responseKey, 0, 0}
+
+		// Wait for response from channel
+		select {
+		case response := <-respCh.ch:
+			if response.Error != nil {
+				if strings.Contains(response.Error.Error(), "not found") {
+					w.WriteHeader(http.StatusNotFound)
+					json.NewEncoder(w).Encode(map[string]string{"error": "resource not found"})
+					return
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": response.Error.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response.Data)
+		case <-time.After(30 * time.Second):
+			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 		}
-
-		log.Error().
-			Err(err).
-			Str("id", req.ID).
-			Str("resourceType", resourceType).
-			Str("tenant", tenantID).
-			Msg("Failed to create review request")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "failed to save review"})
-		return
+	} else {
+		// Tenant not warmed up
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "Tenant not warmed up",
+			"message": "Please call /warm-up-tenant first",
+		})
 	}
-
-	entityKey := resourceType + "/" + req.ID
-	log.Info().
-		Str("tenant", tenantID).
-		Str("entityKey", entityKey).
-		Msg("Review request created successfully")
-
-	response := map[string]string{
-		"status":   "review requested",
-		"tenant":   tenantID,
-		"entity":   entityKey,
-		"reviewed": "true",
-	}
-
-	// Record performance metrics
-	duration := time.Since(start)
-	metrics.RecordHTTPRequest(r.Method, "/review-request", http.StatusOK, duration)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
 }

@@ -3,7 +3,6 @@ package dal
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
@@ -23,63 +22,6 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// ConnectionPool manages a pool of Couchbase connections
-type ConnectionPool struct {
-	connections chan *Connection
-	maxSize     int
-}
-
-var (
-	pool     *ConnectionPool
-	poolOnce sync.Once
-)
-
-// GetConnOrGenConn gets a connection from the pool or creates a new one
-func GetConnOrGenConn() (*Connection, error) {
-	poolOnce.Do(func() {
-		pool = &ConnectionPool{
-			connections: make(chan *Connection, 5), // Pool of 5 connections
-			maxSize:     5,
-		}
-	})
-
-	// Try to get connection from pool
-	select {
-	case conn := <-pool.connections:
-		// Test if connection is still alive
-		if isConnectionAlive(conn) {
-			return conn, nil
-		}
-		// Connection is dead, create a new one
-		return createNewConnection()
-	default:
-		// Pool is empty, create new connection
-		return createNewConnection()
-	}
-}
-
-// ReturnConnection returns a connection to the pool
-func ReturnConnection(conn *Connection) {
-	if conn == nil {
-		return
-	}
-
-	// Test if connection is still alive
-	if !isConnectionAlive(conn) {
-		// Connection is dead, don't return it to pool
-		return
-	}
-
-	// Try to return to pool
-	select {
-	case pool.connections <- conn:
-		// Successfully returned to pool
-	default:
-		// Pool is full, close the connection
-		conn.Close()
-	}
 }
 
 // isConnectionAlive tests if a connection is still usable
@@ -111,22 +53,6 @@ func IsClusterClosedError(err error) bool {
 	return false
 }
 
-// GetConnectionWithRetry gets a connection and retries if cluster is closed
-func GetConnectionWithRetry() (*Connection, error) {
-	conn, err := GetConnOrGenConn()
-	if err != nil {
-		return nil, err
-	}
-
-	// Test the connection
-	if !isConnectionAlive(conn) {
-		// Connection is dead, try to get a fresh one
-		return createNewConnection()
-	}
-
-	return conn, nil
-}
-
 // getConnOrGenConn creates a new Couchbase connection
 func getConnOrGenConn() (*Connection, error) {
 	cbURL := getEnv("COUCHBASE_URL", "couchbase://evt-db")
@@ -152,7 +78,7 @@ func getConnOrGenConn() (*Connection, error) {
 		ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery},
 	})
 	if err != nil {
-		log.Error().Err(err).Msg("Couchbase bucket not ready")
+		log.Error().Err(err).Msg("e ")
 		return nil, fmt.Errorf("bucket not ready: %w", err)
 	}
 

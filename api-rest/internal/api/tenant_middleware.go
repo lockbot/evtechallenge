@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -15,34 +16,26 @@ func TenantChannelMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if channels, exists := GetTenantChannels(tenantID); exists {
-			// Route through tenant channels instead of direct DB calls
-			switch r.URL.Path {
-			case "/encounters":
-				channels.listEncountersCh <- struct{ entity, id string }{"Encounter", ""}
-			case "/encounters/":
-				id := extractID(r.URL.Path)
-				channels.getEncounterCh <- struct{ entity, id string }{"Encounter", id}
-			case "/patients":
-				channels.listPatientsCh <- struct{ entity, id string }{"Patient", ""}
-			case "/patients/":
-				id := extractID(r.URL.Path)
-				channels.getPatientCh <- struct{ entity, id string }{"Patient", id}
-			case "/practitioners":
-				channels.listPractitionersCh <- struct{ entity, id string }{"Practitioner", ""}
-			case "/practitioners/":
-				id := extractID(r.URL.Path)
-				channels.getPractitionerCh <- struct{ entity, id string }{"Practitioner", id}
-			case "/review-request":
-				channels.reviewCh <- struct{ entity, id string }{"Review", ""}
-			default:
-				// For other routes, fallback to direct processing
-				next.ServeHTTP(w, r)
-				return
-			}
-		} else {
-			// Fallback to direct DB calls if tenant not warmed up
+		// Special handling for endpoints that don't require tenant warm-up
+		if r.URL.Path == "/warm-up-tenant" || r.URL.Path == "/" || r.URL.Path == "/hello" || r.URL.Path == "/all-good" || r.URL.Path == "/metrics" {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		if channels, exists := GetTenantChannels(tenantID); exists {
+			// Reset timer for this request
+			channels.ResetTimer()
+
+			// All requests go through handlers - they handle channel routing
+			next.ServeHTTP(w, r)
+		} else {
+			// Tenant not warmed up - return error asking to warm up
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   "Tenant not warmed up",
+				"message": "Please call /warm-up-tenant first",
+			})
 		}
 	})
 }
