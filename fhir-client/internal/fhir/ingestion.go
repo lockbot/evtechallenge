@@ -14,6 +14,17 @@ func (c *Client) IngestData(ctx context.Context) error {
 
 	log.Info().Msg("Starting FHIR data ingestion process")
 
+	// Step 0: Check and set ingestion status
+	err = c.CheckAndSetIngestionStatus(ctx)
+	if err != nil {
+		// Check if error starts with "ingestion already completed"
+		if err.Error()[:30] == "ingestion already completed at" {
+			log.Info().Msg("FHIR ingestion already completed, exiting gracefully")
+			return nil
+		}
+		return fmt.Errorf("failed to check ingestion status (2): %w", err)
+	}
+
 	// Step 1: Check if database is empty and sync existing data
 	err = c.syncExistingData(ctx)
 	if err != nil {
@@ -36,6 +47,12 @@ func (c *Client) IngestData(ctx context.Context) error {
 	err = c.ingestPatients(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to ingest patients: %w", err)
+	}
+
+	// Step 5: Mark ingestion as complete
+	err = c.SetIngestionComplete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to set ingestion complete: %w", err)
 	}
 
 	log.Info().Msg("FHIR data ingestion completed successfully")

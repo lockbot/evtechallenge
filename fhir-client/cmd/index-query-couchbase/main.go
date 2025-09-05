@@ -20,7 +20,7 @@ func getEnv(key, def string) string {
 func main() {
 	ctx := context.Background()
 
-	cbURL := getEnv("COUCHBASE_URL", "couchbase://evtechallenge-db")
+	cbURL := getEnv("COUCHBASE_URL", "couchbase://evt-db")
 	user := getEnv("COUCHBASE_USERNAME", "evtechallenge_user")
 	pass := getEnv("COUCHBASE_PASSWORD", "password")
 

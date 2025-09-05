@@ -1,15 +1,15 @@
 services:
   # Couchbase Database
-  evtechallenge-db:
+  evt-db:
     image: couchbase:community-7.6.2
-    container_name: evtechallenge-db
+    container_name: evt-db
     ports:
       - "8091-8097:8091-8097"  # Client-to-node ports
       - "9123:9123"            # Prometheus metrics port
     environment:
       - COUCHBASE_ADMINISTRATOR_USERNAME=${COUCHBASE_ADMINISTRATOR_USERNAME:-Administrator}
       - COUCHBASE_ADMINISTRATOR_PASSWORD=${COUCHBASE_ADMINISTRATOR_PASSWORD:-password}
-      - COUCHBASE_HOSTNAME=evtechallenge-db
+      - COUCHBASE_HOSTNAME=evt-db
     volumes:
       - couchbase_data:/opt/couchbase/var
       - couchbase_data:/tmp/db-init-flag
@@ -22,11 +22,11 @@ services:
       retries: 5
 
   # Couchbase Setup Service (runs once to create bucket and user)
-  evtechallenge-db-setup:
+  evt-db-setup:
     image: couchbase:community-7.6.2
-    container_name: evtechallenge-db-setup
+    container_name: evt-db-setup
     depends_on:
-      evtechallenge-db:
+      evt-db:
         condition: service_healthy
     environment:
       - COUCHBASE_ADMINISTRATOR_USERNAME=${COUCHBASE_ADMINISTRATOR_USERNAME:-Administrator}
@@ -36,8 +36,8 @@ services:
       - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
     volumes:
       - couchbase_data:/tmp/db-init-flag
-      - ./scripts/couchbase-setup.sh:/scripts/couchbase-setup.sh:ro
-    command: ["/bin/sh", "/scripts/couchbase-setup.sh"]
+      - ./scripts/evt-db-setup.sh:/scripts/evt-db-setup.sh:ro
+    command: ["/bin/sh", "/scripts/evt-db-setup.sh"]
     networks:
       - evtechallenge_network
     restart: "no"
@@ -51,10 +51,10 @@ services:
     ports:
       - "${API_PORT}:${API_PORT}"
     depends_on:
-      evtechallenge-db-setup:
+      evt-db-setup:
         condition: service_completed_successfully
     environment:
-      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
       - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
@@ -77,10 +77,10 @@ services:
     ports:
       - "${FHIR_PORT}:${FHIR_PORT}"
     depends_on:
-      evtechallenge-db-setup:
+      evt-db-setup:
         condition: service_completed_successfully
     environment:
-      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
       - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}

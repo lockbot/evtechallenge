@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/api-rest/internal/api"
+	"stealthcompany.com/api-rest/internal/dal"
 	"stealthcompany.com/api-rest/internal/metrics"
 	"stealthcompany.com/pkg/zerolog_config"
 )
@@ -38,19 +43,68 @@ func main() {
 	// Start system metrics collection
 	metrics.StartSystemMetricsCollection("api-rest")
 
+	// Wait for FHIR ingestion to complete before starting API
+	log.Info().Msg("Waiting for FHIR ingestion to complete...")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	err = api.WaitForFHIRIngestion(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to wait for FHIR ingestion")
+	}
+
 	// Setup routes
 	router := api.SetupRoutes()
 
-	log.Info().
-		Str("port", apiPort).
-		Msg("Server starting")
-
-	err = http.ListenAndServe(":"+apiPort, router)
-	if err != nil {
-		log.Fatal().
-			Err(err).
-			Msg("Failed to start server")
+	// Create HTTP server
+	server := &http.Server{
+		Addr:    ":" + apiPort,
+		Handler: router,
 	}
+
+	// Setup graceful shutdown
+
+	// Listen for shutdown signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in goroutine
+	go func() {
+		log.Info().
+			Str("port", apiPort).
+			Msg("Server starting")
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal().
+				Err(err).
+				Msg("Failed to start server")
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-sigChan
+	log.Info().Msg("Received shutdown signal, shutting down gracefully...")
+
+	// Shutdown server with timeout
+	shutdownTimeout := 30 * time.Second
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("Server shutdown failed")
+	}
+
+	// Close database connection
+	log.Info().Msg("Closing database connection...")
+	dalConn, err := dal.GetConnOrGenConn()
+	if err == nil {
+		dalConn.Close()
+		log.Info().Msg("Database connection closed")
+	} else {
+		log.Warn().Err(err).Msg("Failed to get connection for cleanup")
+	}
+
+	log.Info().Msg("API service shutdown complete")
 }
 
 // Helper function to get environment variable with default

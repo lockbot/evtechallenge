@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
+	"stealthcompany.com/fhir-client/internal/dal"
 	"stealthcompany.com/fhir-client/internal/fhir"
 	"stealthcompany.com/fhir-client/internal/metrics"
 	"stealthcompany.com/pkg/zerolog_config"
@@ -90,6 +91,16 @@ func main() {
 	}
 
 	log.Info().Msg("FHIR data ingestion completed successfully")
+
+	// Keep the service running for metrics even after ingestion completes
+	log.Info().Msg("FHIR ingestion complete, keeping service running for metrics")
+
+	// Close all database connections since we're entering metrics-only mode
+	dal.CloseAllConnections()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	log.Info().Msg("Shutting down FHIR service")
 }
 
 // Helper function to get environment variable with default

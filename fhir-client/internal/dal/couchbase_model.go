@@ -3,11 +3,17 @@ package dal
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/fhir-client/internal/metrics"
+)
+
+var (
+	indexesCreated bool
+	indexMutex     sync.Mutex
 )
 
 // ResourceModel represents the database model for FHIR resources
@@ -22,8 +28,47 @@ func NewResourceModel(conn *Connection) *ResourceModel {
 	}
 }
 
+// createIndexesIfNeeded creates secondary indexes if they don't exist
+func (rm *ResourceModel) createIndexesIfNeeded(ctx context.Context) error {
+	indexMutex.Lock()
+	defer indexMutex.Unlock()
+
+	if indexesCreated {
+		return nil
+	}
+
+	log.Info().Msg("Creating secondary indexes for efficient querying...")
+
+	// Create indexes using N1QL queries
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_resourceType ON `" + rm.conn.GetBucketName() + "`(resourceType)",
+		"CREATE INDEX IF NOT EXISTS idx_id ON `" + rm.conn.GetBucketName() + "`(id)",
+		"CREATE INDEX IF NOT EXISTS idx_subjectPatientId ON `" + rm.conn.GetBucketName() + "`(subjectPatientId)",
+		"CREATE INDEX IF NOT EXISTS idx_practitionerIds ON `" + rm.conn.GetBucketName() + "`(practitionerIds)",
+		"CREATE INDEX IF NOT EXISTS idx_resourceType_id ON `" + rm.conn.GetBucketName() + "`(resourceType, id)",
+	}
+
+	for _, indexQuery := range indexes {
+		_, err := rm.conn.GetCluster().Query(indexQuery, &gocb.QueryOptions{Context: ctx})
+		if err != nil {
+			log.Warn().Err(err).Str("query", indexQuery).Msg("Failed to create index (may already exist)")
+		} else {
+			log.Debug().Str("query", indexQuery).Msg("Index created successfully")
+		}
+	}
+
+	indexesCreated = true
+	log.Info().Msg("Secondary indexes creation completed")
+	return nil
+}
+
 // UpsertResource upserts a FHIR resource to Couchbase
 func (rm *ResourceModel) UpsertResource(ctx context.Context, docID string, data map[string]interface{}) error {
+	// Create indexes on first upsert
+	if err := rm.createIndexesIfNeeded(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to create indexes, continuing with upsert")
+	}
+
 	start := time.Now()
 	_, err := rm.conn.bucket.DefaultCollection().Upsert(docID, data, nil)
 	duration := time.Since(start)

@@ -5,7 +5,7 @@ services:
       dockerfile: fhir-client/cmd/index-query-couchbase/Dockerfile
     container_name: evtechallenge-mock
     environment:
-      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evtechallenge-db}
+      - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
     networks:

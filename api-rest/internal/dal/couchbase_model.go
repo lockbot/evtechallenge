@@ -92,7 +92,7 @@ func (rm *ResourceModel) ListResources(ctx context.Context, resourceType string,
 		Msg("Querying resources")
 
 	query := "SELECT META(d).id AS id, d AS resource FROM `" + rm.conn.GetBucketName() +
-		"` AS d WHERE d.`resourceType` = $rt LIMIT " + strconv.Itoa(params.Count) +
+		"` AS d WHERE d.`resourceType` = $rt ORDER BY META(d).id LIMIT " + strconv.Itoa(params.Count) +
 		" OFFSET " + strconv.Itoa(offset)
 
 	rows, err := rm.conn.GetCluster().Query(query, &gocb.QueryOptions{

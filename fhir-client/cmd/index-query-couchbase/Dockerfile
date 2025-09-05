@@ -20,7 +20,7 @@ RUN apk add --no-cache ca-certificates
 COPY --from=builder /mock /mock
 
 # Default envs (can be overridden at runtime)
-ENV COUCHBASE_URL=couchbase://evtechallenge-db \
+ENV COUCHBASE_URL=couchbase://evt-db \
     COUCHBASE_USERNAME=evtechallenge_user \
     COUCHBASE_PASSWORD=password
 

@@ -69,6 +69,16 @@ var (
 		},
 		[]string{"service"},
 	)
+
+	// Channel operation metrics
+	ChannelOperationDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "channel_operation_duration_seconds",
+			Help:    "Duration of channel operations in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"operation"},
+	)
 )
 
 // RecordHTTPRequest records metrics for an HTTP request
@@ -102,6 +112,11 @@ func UpdateSystemMetrics(serviceName string) {
 	GoMemstatsAllocBytes.WithLabelValues(serviceName).Set(float64(m.Alloc))
 	GoMemstatsSysBytes.WithLabelValues(serviceName).Set(float64(m.Sys))
 	GoThreads.WithLabelValues(serviceName).Set(float64(runtime.GOMAXPROCS(0)))
+}
+
+// RecordChannelOperation records metrics for channel operations
+func RecordChannelOperation(operation string, duration time.Duration) {
+	ChannelOperationDuration.WithLabelValues(operation).Observe(duration.Seconds())
 }
 
 // StartSystemMetricsCollection starts a goroutine to collect system metrics

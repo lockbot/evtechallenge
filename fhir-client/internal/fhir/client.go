@@ -39,7 +39,7 @@ func NewClient() (*Client, error) {
 	}
 
 	// Connect to Couchbase via DAL
-	dalConn, err := dal.NewConnection()
+	dalConn, err := dal.GetConnOrGenConn()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize DAL connection: %w", err)
 	}
@@ -65,10 +65,11 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-// Close closes the FHIR client and connections
+// Close closes the FHIR client and returns connection to pool
 func (c *Client) Close() error {
 	if c.dal != nil {
-		return c.dal.Close()
+		dal.ReturnConnection(c.dal)
+		c.dal = nil
 	}
 	return nil
 }

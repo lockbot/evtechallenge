@@ -2,6 +2,7 @@ package fhir
 
 import (
 	"strings"
+	"time"
 )
 
 // FHIRBundle represents a FHIR bundle response
@@ -26,6 +27,19 @@ type FHIRResource struct {
 	Meta         map[string]interface{} `json:"meta,omitempty"`
 	Data         map[string]interface{} `json:"-"`
 }
+
+// IngestionStatus represents the FHIR client ingestion status
+type IngestionStatus struct {
+	Ready       bool      `json:"ready"`
+	StartedAt   time.Time `json:"startedAt"`
+	CompletedAt time.Time `json:"completedAt,omitempty"`
+	Message     string    `json:"message"`
+}
+
+const (
+	// System document keys
+	IngestionStatusKey = "_system/ingestion_status"
+)
 
 // extractPatientReferences extracts patient references from an encounter resource
 func (c *Client) extractPatientReferences(resource map[string]interface{}) []string {

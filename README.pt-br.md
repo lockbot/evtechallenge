@@ -72,25 +72,41 @@ docker-compose down
 Crie um arquivo `.env` na raiz do repositório:
 
 ```bash
+# Configuração da API
+API_PORT=8080
+API_LOG_LEVEL="info"
+
+# Configuração do FHIR Client
+FHIR_PORT=8081
+FHIR_LOG_LEVEL="info"
+FHIR_BASE_URL=http://hapi.fhir.org/baseR4
+FHIR_TIMEOUT=30s
+
 # Configuração do Couchbase
-COUCHBASE_URL=couchbase://evtechallenge-db
+COUCHBASE_URL=evtechallenge-db://evtechallenge-db
+COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+COUCHBASE_ADMINISTRATOR_PASSWORD=password
 COUCHBASE_USERNAME=evtechallenge_user
 COUCHBASE_PASSWORD=password
 COUCHBASE_BUCKET=evtechallenge
+COUCHBASE_MANAGEMENT_HOST=evt-db:8091
 
-# Configuração do FHIR Client
-FHIR_BASE_URL=https://hapi.fhir.org/baseR4
-FHIR_TIMEOUT=30s
-
-# Configuração da API
-API_PORT=8080
-
-# Configuração de Observabilidade
+# Observabilidade (opcional)
+ENABLE_ELASTICSEARCH=false
+ENABLE_SYSTEM_METRICS=false
+ENABLE_BUSINESS_METRICS=false
 ELASTICSEARCH_URL=http://elasticsearch:9200
-ELASTICSEARCH_INDEX=logs
-ENABLE_ELASTICSEARCH=true
-ENABLE_SYSTEM_METRICS=true
-ENABLE_BUSINESS_METRICS=true
+
+# Configuração do Grafana (opcional - padrões funcionam)
+GRAFANA_ADMIN_PASSWORD=admin
+GRAFANA_PORT=3000
+
+# Configuração do Elasticsearch (opcional - padrões funcionam)
+ELASTICSEARCH_PORT=9200
+ELASTICSEARCH_TRANSPORT_PORT=9300
+
+# Configuração do Prometheus (opcional - padrões funcionam)
+PROMETHEUS_PORT=9090
 ```
 
 ## Decisões Técnicas

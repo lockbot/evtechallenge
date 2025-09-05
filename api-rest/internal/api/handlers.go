@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -125,6 +126,7 @@ func AllGoodHandler(w http.ResponseWriter, r *http.Request) {
 // GetResourceByIDHandler handles GET /{resource}/{id}
 func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
 			log.Warn().
@@ -152,7 +154,7 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 		}
 
 		// Create connection and resource model
-		conn, err := dal.NewConnection()
+		conn, err := dal.GetConnOrGenConn()
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -162,7 +164,7 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
 			return
 		}
-		defer conn.Close()
+		defer dal.ReturnConnection(conn) // Return connection to pool
 
 		resourceModel := dal.NewResourceModel(conn)
 
@@ -226,6 +228,10 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 			Bool("reviewed", reviewInfo.Reviewed).
 			Msg("Resource retrieved successfully")
 
+		// Record performance metrics
+		duration := time.Since(start)
+		metrics.RecordHTTPRequest(r.Method, "/"+strings.ToLower(resourceType)+"/{id}", http.StatusOK, duration)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
@@ -235,6 +241,7 @@ func GetResourceByIDHandler(resourceType string) http.HandlerFunc {
 // ListResourcesHandler handles GET /{resource}
 func ListResourcesHandler(resourceType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
 			log.Warn().
@@ -260,7 +267,7 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 		}
 
 		// Create connection and resource model
-		conn, err := dal.NewConnection()
+		conn, err := dal.GetConnOrGenConn()
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -270,7 +277,7 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
 			return
 		}
-		defer conn.Close()
+		defer dal.ReturnConnection(conn) // Return connection to pool
 
 		resourceModel := dal.NewResourceModel(conn)
 
@@ -345,6 +352,10 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 			Int("resultCount", len(paginatedResponse.Data)).
 			Msg("Resources listed successfully")
 
+		// Record performance metrics
+		duration := time.Since(start)
+		metrics.RecordHTTPRequest(r.Method, "/"+strings.ToLower(resourceType), http.StatusOK, duration)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(paginatedResponse)
@@ -353,6 +364,7 @@ func ListResourcesHandler(resourceType string) http.HandlerFunc {
 
 // ReviewRequestHandler handles POST /review-request
 func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	tenantID, err := GetTenantFromRequest(r)
 	if err != nil {
 		log.Warn().
@@ -420,7 +432,7 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create connection and resource model
-	conn, err := dal.NewConnection()
+	conn, err := dal.GetConnOrGenConn()
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -430,7 +442,7 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "database connection failed"})
 		return
 	}
-	defer conn.Close()
+	defer dal.ReturnConnection(conn) // Return connection to pool
 
 	resourceModel := dal.NewResourceModel(conn)
 	reviewModel := dal.NewReviewModel(resourceModel)
@@ -470,6 +482,10 @@ func ReviewRequestHandler(w http.ResponseWriter, r *http.Request) {
 		"entity":   entityKey,
 		"reviewed": "true",
 	}
+
+	// Record performance metrics
+	duration := time.Since(start)
+	metrics.RecordHTTPRequest(r.Method, "/review-request", http.StatusOK, duration)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

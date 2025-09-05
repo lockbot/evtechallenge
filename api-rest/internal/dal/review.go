@@ -3,10 +3,16 @@ package dal
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	reviewIndexesCreated bool
+	reviewIndexMutex     sync.Mutex
 )
 
 // ReviewDocument represents a tenant's review list
@@ -117,8 +123,45 @@ func (rm *ReviewModel) GetReviewInfo(ctx context.Context, tenantID, resourceType
 	}
 }
 
+// createReviewIndexesIfNeeded creates secondary indexes for review queries if they don't exist
+func (rm *ReviewModel) createReviewIndexesIfNeeded(ctx context.Context) error {
+	reviewIndexMutex.Lock()
+	defer reviewIndexMutex.Unlock()
+
+	if reviewIndexesCreated {
+		return nil
+	}
+
+	log.Info().Msg("Creating secondary indexes for review queries...")
+
+	// Create indexes using N1QL queries
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_tenantId ON `" + rm.resourceModel.conn.GetBucketName() + "`(tenantId)",
+		"CREATE INDEX IF NOT EXISTS idx_resourceType ON `" + rm.resourceModel.conn.GetBucketName() + "`(resourceType)",
+		"CREATE INDEX IF NOT EXISTS idx_id ON `" + rm.resourceModel.conn.GetBucketName() + "`(id)",
+		"CREATE INDEX IF NOT EXISTS idx_resourceType_id ON `" + rm.resourceModel.conn.GetBucketName() + "`(resourceType, id)",
+	}
+
+	for _, indexQuery := range indexes {
+		_, err := rm.resourceModel.conn.GetCluster().Query(indexQuery, &gocb.QueryOptions{Context: ctx})
+		if err != nil {
+			log.Warn().Err(err).Str("query", indexQuery).Msg("Failed to create index (may already exist)")
+		} else {
+			log.Debug().Str("query", indexQuery).Msg("Index created successfully")
+		}
+	}
+
+	reviewIndexesCreated = true
+	log.Info().Msg("Review indexes creation completed")
+	return nil
+}
+
 // CreateReviewRequest creates or updates a review for a resource
 func (rm *ReviewModel) CreateReviewRequest(ctx context.Context, tenantID, resourceType, resourceID string) error {
+	// Create indexes on first review creation
+	if err := rm.createReviewIndexesIfNeeded(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to create review indexes, continuing with review creation")
+	}
 	// Verify the resource exists
 	resourceKey := resourceType + "/" + resourceID
 	exists, err := rm.resourceModel.ResourceExists(ctx, resourceKey)

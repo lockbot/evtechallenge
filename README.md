@@ -72,25 +72,41 @@ docker-compose down
 Create a `.env` file in the repository root:
 
 ```bash
+# API Configuration
+API_PORT=8080
+API_LOG_LEVEL="info"
+
+# FHIR Client Configuration
+FHIR_PORT=8081
+FHIR_LOG_LEVEL="info"
+FHIR_BASE_URL=http://hapi.fhir.org/baseR4
+FHIR_TIMEOUT=30s
+
 # Couchbase Configuration
-COUCHBASE_URL=couchbase://evtechallenge-db
+COUCHBASE_URL=evtechallenge-db://evtechallenge-db
+COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
+COUCHBASE_ADMINISTRATOR_PASSWORD=password
 COUCHBASE_USERNAME=evtechallenge_user
 COUCHBASE_PASSWORD=password
 COUCHBASE_BUCKET=evtechallenge
+COUCHBASE_MANAGEMENT_HOST=evt-db:8091
 
-# FHIR Client Configuration
-FHIR_BASE_URL=https://hapi.fhir.org/baseR4
-FHIR_TIMEOUT=30s
-
-# API Configuration
-API_PORT=8080
-
-# Observability Configuration
+# Observability (optional)
+ENABLE_ELASTICSEARCH=false
+ENABLE_SYSTEM_METRICS=false
+ENABLE_BUSINESS_METRICS=false
 ELASTICSEARCH_URL=http://elasticsearch:9200
-ELASTICSEARCH_INDEX=logs
-ENABLE_ELASTICSEARCH=true
-ENABLE_SYSTEM_METRICS=true
-ENABLE_BUSINESS_METRICS=true
+
+# Grafana Configuration (optional - defaults work)
+GRAFANA_ADMIN_PASSWORD=admin
+GRAFANA_PORT=3000
+
+# Elasticsearch Configuration (optional - defaults work)
+ELASTICSEARCH_PORT=9200
+ELASTICSEARCH_TRANSPORT_PORT=9300
+
+# Prometheus Configuration (optional - defaults work)
+PROMETHEUS_PORT=9090
 ```
 
 ## Technical Decisions

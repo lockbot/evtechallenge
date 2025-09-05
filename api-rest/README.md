@@ -33,7 +33,7 @@ go run ./api-rest
 ## Configuration
 
 Environment variables:
-- `COUCHBASE_URL=couchbase://evtechallenge-db`
+- `COUCHBASE_URL=couchbase://evt-db`
 - `COUCHBASE_USERNAME=evtechallenge_user`
 - `COUCHBASE_PASSWORD=password`
 - `COUCHBASE_BUCKET=evtechallenge`

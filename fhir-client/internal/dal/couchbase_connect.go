@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
@@ -17,12 +18,108 @@ type Connection struct {
 	bucketName string
 }
 
-// NewConnection creates a new Couchbase connection
-func NewConnection() (*Connection, error) {
+// ConnectionPool manages a pool of Couchbase connections
+type ConnectionPool struct {
+	connections chan *Connection
+	maxSize     int
+}
+
+var (
+	pool     *ConnectionPool
+	poolOnce sync.Once
+)
+
+// GetConnOrGenConn gets a connection from the pool or creates a new one
+func GetConnOrGenConn() (*Connection, error) {
+	poolOnce.Do(func() {
+		pool = &ConnectionPool{
+			connections: make(chan *Connection, 5), // Pool of 5 connections
+			maxSize:     5,
+		}
+	})
+
+	// Try to get connection from pool
+	select {
+	case conn := <-pool.connections:
+		// Test if connection is still alive
+		if isConnectionAlive(conn) {
+			return conn, nil
+		}
+		// Connection is dead, create a new one
+		return createNewConnection()
+	default:
+		// Pool is empty, create new connection
+		return createNewConnection()
+	}
+}
+
+// ReturnConnection returns a connection to the pool
+func ReturnConnection(conn *Connection) {
+	if conn == nil {
+		return
+	}
+
+	// Test if connection is still alive
+	if !isConnectionAlive(conn) {
+		// Connection is dead, don't return it to pool
+		return
+	}
+
+	// Try to return to pool
+	select {
+	case pool.connections <- conn:
+		// Successfully returned to pool
+	default:
+		// Pool is full, close the connection
+		conn.Close()
+	}
+}
+
+// isConnectionAlive tests if a connection is still usable
+func isConnectionAlive(conn *Connection) bool {
+	if conn == nil || conn.cluster == nil {
+		return false
+	}
+
+	// Try a simple operation to test the connection
+	_, err := conn.cluster.Ping(&gocb.PingOptions{})
+	return err == nil
+}
+
+// createNewConnection creates a fresh Couchbase connection
+func createNewConnection() (*Connection, error) {
+	return getConnOrGenConn()
+}
+
+// CloseAllConnections closes all connections in the pool (for graceful shutdown)
+func CloseAllConnections() {
+	if pool == nil {
+		return
+	}
+
+	log.Info().Msg("Closing all connections in pool...")
+
+	// Close all connections in the pool
+	for {
+		select {
+		case conn := <-pool.connections:
+			if conn != nil {
+				conn.Close()
+			}
+		default:
+			// Pool is empty
+			log.Info().Msg("All connections closed")
+			return
+		}
+	}
+}
+
+// getConnOrGenConn creates a new Couchbase connection
+func getConnOrGenConn() (*Connection, error) {
 	var err error
 
 	// Get configuration from environment
-	couchbaseURL := getEnvOrDefault("COUCHBASE_URL", "couchbase://evtechallenge-db")
+	couchbaseURL := getEnvOrDefault("COUCHBASE_URL", "couchbase://evt-db")
 	username := getEnvOrDefault("COUCHBASE_USERNAME", "evtechallenge_user")
 	password := getEnvOrDefault("COUCHBASE_PASSWORD", "password")
 	bucketName := getEnvOrDefault("COUCHBASE_BUCKET", "evtechallenge")

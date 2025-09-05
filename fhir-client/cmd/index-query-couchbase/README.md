@@ -7,7 +7,7 @@ docker-compose -f docker-compose.mock.yml up --build --abort-on-container-exit
 ```
 
 This builds a small container that connects to Couchbase using the default envs:
-- COUCHBASE_URL=couchbase://evtechallenge-db
+- COUCHBASE_URL=couchbase://evt-db
 - COUCHBASE_USERNAME=evtechallenge_user
 - COUCHBASE_PASSWORD=password
 

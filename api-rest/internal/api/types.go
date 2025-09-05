@@ -1,24 +1,38 @@
 package api
 
-// AllGoodRequest represents the expected JSON payload
+import "time"
+
+// Request Types
 type AllGoodRequest struct {
 	Yes bool `json:"yes"`
 }
 
-// ReviewRequest represents the expected JSON payload for review requests
 type ReviewRequest struct {
 	Entity string `json:"entity"`
 	ID     string `json:"id"`
 }
 
-// ResponseWithReview wraps API responses with review status
+// Response Types
 type ResponseWithReview struct {
 	Reviewed   bool                   `json:"reviewed"`
 	ReviewTime string                 `json:"reviewTime,omitempty"`
 	Data       map[string]interface{} `json:"data"`
 }
 
+// System Types
+type IngestionStatus struct {
+	Ready       bool      `json:"ready"`
+	StartedAt   time.Time `json:"startedAt"`
+	CompletedAt time.Time `json:"completedAt,omitempty"`
+	Message     string    `json:"message"`
+}
+
+// Constants
 const (
+	// Tenant Management
 	TenantHeaderKey = "X-Tenant-ID"
 	DefaultTenant   = "default"
+
+	// System Document Keys
+	IngestionStatusKey = "_system/ingestion_status"
 )
