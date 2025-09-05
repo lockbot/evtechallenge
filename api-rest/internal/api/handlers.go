@@ -9,116 +9,20 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
-	"stealthcompany.com/api-rest/internal/metrics"
 )
 
-// HelloHandler returns a simple hello world message
-func HelloHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := GetTenantFromRequest(r)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
+// RootHandler returns the API information
+func RootHandler(w http.ResponseWriter, r *http.Request) {
 	log.Info().
 		Str("method", r.Method).
 		Str("path", r.URL.Path).
 		Str("remote_addr", r.RemoteAddr).
-		Str("tenant", tenantID).
-		Msg("Hello endpoint called")
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{
-		"message": "Hello, World!",
-		"status":  "success",
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// AllGoodHandler expects {"yes": true} or returns business error
-func AllGoodHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := GetTenantFromRequest(r)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	log.Info().
-		Str("method", r.Method).
-		Str("path", r.URL.Path).
-		Str("remote_addr", r.RemoteAddr).
-		Str("tenant", tenantID).
-		Msg("All-good endpoint called")
-
-	if r.Method != http.MethodPost {
-		log.Warn().
-			Str("method", r.Method).
-			Str("tenant", tenantID).
-			Msg("Method not allowed on all-good endpoint")
-
-		metrics.RecordAllGoodRequest("method_not_allowed")
-
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Method not allowed",
-		})
-		return
-	}
-
-	var req AllGoodRequest
-	err = json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant", tenantID).
-			Msg("Failed to decode JSON request")
-
-		metrics.RecordAllGoodRequest("invalid_json")
-
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Invalid JSON format",
-		})
-		return
-	}
-
-	if !req.Yes {
-		log.Warn().
-			Bool("received_yes", req.Yes).
-			Str("tenant", tenantID).
-			Msg("Business validation failed - yes must be true")
-
-		metrics.RecordAllGoodRequest("validation_failed")
-
-		w.WriteHeader(http.StatusUnprocessableEntity) // 422 - Business logic error
-		json.NewEncoder(w).Encode(map[string]string{
-			"error":   "Business validation failed",
-			"message": "Field 'yes' must be true",
-		})
-		return
-	}
-
-	log.Info().
-		Bool("yes", req.Yes).
-		Str("tenant", tenantID).
-		Msg("All good request processed successfully")
-
-	metrics.RecordAllGoodRequest("success")
+		Msg("Root request received")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "All good!",
-		"status":  "success",
+		"api": "EVTeChallenge",
 	})
 }
 

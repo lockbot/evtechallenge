@@ -17,9 +17,7 @@ func SetupRoutes() *mux.Router {
 	// Note: Couchbase connections are now created per-request to avoid globals
 
 	// Routes
-	r.HandleFunc("/", HelloHandler).Methods("GET")
-	r.HandleFunc("/hello", HelloHandler).Methods("GET")
-	r.HandleFunc("/all-good", AllGoodHandler).Methods("POST")
+	r.HandleFunc("/", RootHandler).Methods("GET")
 
 	// FHIR resource endpoints
 	r.HandleFunc("/encounters", ListResourcesHandler("Encounter")).Methods("GET")
