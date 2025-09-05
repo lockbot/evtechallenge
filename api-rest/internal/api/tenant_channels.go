@@ -1,8 +1,6 @@
 package api
 
 import (
-	"encoding/json"
-	"net/http"
 	"sync"
 	"time"
 
@@ -42,22 +40,8 @@ type ResponseMessage struct {
 var tenantChannels = make(map[string]*TenantChannels)
 var channelsMutex sync.RWMutex
 
-// WarmUpTenantHandler creates and starts channel-based processing for a tenant
-func WarmUpTenantHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := GetTenantFromRequest(r)
-	if err != nil {
-		log.Warn().
-			Err(err).
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Msg("Invalid tenant ID in warm-up request")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
+// AutoWarmUpTenant automatically warms up a tenant on first request
+func AutoWarmUpTenant(tenantID string) *TenantChannels {
 	channelsMutex.Lock()
 	defer channelsMutex.Unlock()
 
@@ -85,14 +69,9 @@ func WarmUpTenantHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Info().
 		Str("tenant", tenantID).
-		Msg("Tenant warmed up successfully")
+		Msg("Tenant auto-warmed up on first request")
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Tenant warmed up successfully",
-		"status":  "success",
-	})
+	return channels
 }
 
 // manageTimer handles the 10-minute timer with reset capability

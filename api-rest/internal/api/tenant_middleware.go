@@ -17,7 +17,7 @@ func TenantChannelMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Special handling for endpoints that don't require tenant warm-up
-		if r.URL.Path == "/warm-up-tenant" || r.URL.Path == "/" || r.URL.Path == "/hello" || r.URL.Path == "/all-good" || r.URL.Path == "/metrics" {
+		if r.URL.Path == "/" || r.URL.Path == "/hello" || r.URL.Path == "/all-good" || r.URL.Path == "/metrics" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -29,13 +29,24 @@ func TenantChannelMiddleware(next http.Handler) http.Handler {
 			// All requests go through handlers - they handle channel routing
 			next.ServeHTTP(w, r)
 		} else {
-			// Tenant not warmed up - return error asking to warm up
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error":   "Tenant not warmed up",
-				"message": "Please call /warm-up-tenant first",
-			})
+			// Auto-warm-up tenant on first request
+			channels = AutoWarmUpTenant(tenantID)
+			if channels == nil {
+				// Auto-warm-up failed - return error
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "Failed to warm up tenant",
+					"message": "Unable to initialize tenant channels",
+				})
+				return
+			}
+
+			// Reset timer for this request
+			channels.ResetTimer()
+
+			// All requests go through handlers - they handle channel routing
+			next.ServeHTTP(w, r)
 		}
 	})
 }
