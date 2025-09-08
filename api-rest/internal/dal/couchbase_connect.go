@@ -58,7 +58,7 @@ func getConnOrGenConn() (*Connection, error) {
 	cbURL := getEnv("COUCHBASE_URL", "couchbase://evt-db")
 	user := getEnv("COUCHBASE_USERNAME", "evtechallenge_user")
 	pass := getEnv("COUCHBASE_PASSWORD", "password")
-	bucketName := getEnv("COUCHBASE_BUCKET", "evtechallenge")
+	bucketName := getEnv("COUCHBASE_BUCKET", "EvTeChallenge")
 
 	log.Info().
 		Str("url", cbURL).

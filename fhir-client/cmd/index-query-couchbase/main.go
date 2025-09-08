@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -31,16 +32,13 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("connect cluster: %w", err))
 	}
-	bucket := cluster.Bucket("evtechallenge")
+	bucket := cluster.Bucket("EvTeChallenge")
 	err = bucket.WaitUntilReady(60*time.Second, &gocb.WaitUntilReadyOptions{Context: ctx, ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery}})
 	if err != nil {
 		panic(fmt.Errorf("bucket not ready: %w", err))
 	}
 
-	// 1) Count all resources by type
-	fmt.Printf("Total Encounters: %d\n", countByType(cluster, "Encounter"))
-	fmt.Printf("Total Patients: %d\n", countByType(cluster, "Patient"))
-	fmt.Printf("Total Practitioners: %d\n", countByType(cluster, "Practitioner"))
+	// 1) Count all resources by collection (will be shown at the end)
 
 	// 2) Get up to 15 encounters, pick the first with both patient and practitioners
 	type encRow struct {
@@ -50,7 +48,7 @@ func main() {
 		PractitionerIDs []string               `json:"practitionerIds"`
 	}
 
-	q1 := "SELECT META(d).id AS id, d AS resource, d.subjectPatientId AS subjectPatientId, d.practitionerIds AS practitionerIds FROM `evtechallenge` AS d WHERE d.`resourceType` = 'Encounter' LIMIT 15"
+	q1 := "SELECT META(d).id AS id, d AS resource, d.subjectPatientId AS subjectPatientId, d.practitionerIds AS practitionerIds FROM `EvTeChallenge`.`_default`.`encounters` AS d ORDER BY META(d).id LIMIT 5"
 	rows, err := cluster.Query(q1, &gocb.QueryOptions{Adhoc: true})
 	if err != nil {
 		panic(fmt.Errorf("query encounters: %w", err))
@@ -65,6 +63,13 @@ func main() {
 	}
 	if err := rows.Err(); err != nil {
 		panic(fmt.Errorf("iter rows: %w", err))
+	}
+
+	// Debug: Show JSON of first 5 encounters
+	fmt.Println("\n=== First 5 Encounters (Debug) ===")
+	for i, enc := range encs {
+		jsonData, _ := json.MarshalIndent(enc, "", "  ")
+		fmt.Printf("Encounter %d:\n%s\n\n", i+1, string(jsonData))
 	}
 
 	var picked encRow
@@ -87,13 +92,13 @@ func main() {
 		}
 	}
 	if !found {
-		fmt.Println("No encounter with both patient and practitioners found in first 15.")
+		fmt.Println("No encounter with both patient and practitioners found in first 5.")
 		return
 	}
 	fmt.Printf("Picked encounter key: %s\n", picked.ID)
 
 	// 3) Re-query this encounter by identifier (key)
-	q2 := "SELECT META(d).id AS id FROM `evtechallenge` AS d USE KEYS $key"
+	q2 := "SELECT META(d).id AS id FROM `EvTeChallenge`.`_default`.`encounters` AS d USE KEYS $key"
 	rows2, err := cluster.Query(q2, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"key": picked.ID}})
 	if err != nil {
 		panic(fmt.Errorf("requery by key: %w", err))
@@ -119,36 +124,91 @@ func main() {
 	fmt.Printf("Encounter patientID: %s\n", patientID)
 	fmt.Printf("Encounter practitionerIDs: %v\n", practitionerIDs)
 
-	// 5) Test query by these IDs (N1QL on resourceType+id)
+	// 5) Test query by these IDs using collections
 	if patientID != "" {
-		ok := existsByTypeAndID(cluster, "Patient", patientID)
+		ok := existsByCollectionAndID(cluster, "patients", patientID)
 		fmt.Printf("Patient %s exists by N1QL: %v\n", patientID, ok)
 	}
 	for _, pid := range practitionerIDs {
-		ok := existsByTypeAndID(cluster, "Practitioner", pid)
+		ok := existsByCollectionAndID(cluster, "practitioners", pid)
 		fmt.Printf("Practitioner %s exists by N1QL: %v\n", pid, ok)
 	}
 
 	// 6) List all Patients and verify membership
-	allPatients := listIDsByType(cluster, "Patient")
+	allPatients := listIDsByCollection(cluster, "patients")
 	if patientID != "" {
 		fmt.Printf("Patient %s present in full list: %v\n", patientID, contains(allPatients, patientID))
 	}
 	// 7) Same for Practitioners
-	allPractitioners := listIDsByType(cluster, "Practitioner")
+	allPractitioners := listIDsByCollection(cluster, "practitioners")
 	for _, pid := range practitionerIDs {
 		fmt.Printf("Practitioner %s present in full list: %v\n", pid, contains(allPractitioners, pid))
 	}
+
+	// 8) Demonstrate collection-based JOIN query
+	fmt.Println("\n=== Collection-based JOIN Demo ===")
+	if patientID != "" && len(practitionerIDs) > 0 {
+		joinQuery := `
+			SELECT 
+				e.id as encounter_id,
+				e.subjectPatientId,
+				p.id as patient_id,
+				pr.id as practitioner_id
+			FROM EvTeChallenge._default.encounters e
+			LEFT JOIN EvTeChallenge._default.patients p ON e.subjectPatientId = p.id
+			LEFT JOIN EvTeChallenge._default.practitioners pr ON pr.id IN e.practitionerIds
+			WHERE e.id = $encounter_id
+			LIMIT 1`
+
+		rows, err := cluster.Query(joinQuery, &gocb.QueryOptions{
+			NamedParameters: map[string]interface{}{"encounter_id": picked.ID},
+		})
+		if err != nil {
+			fmt.Printf("Join query error: %v\n", err)
+		} else {
+			defer rows.Close()
+			for rows.Next() {
+				var result struct {
+					EncounterID    string `json:"encounter_id"`
+					SubjectPatient string `json:"subjectPatientId"`
+					PatientID      string `json:"patient_id"`
+					PractitionerID string `json:"practitioner_id"`
+				}
+				if err := rows.Row(&result); err == nil {
+					fmt.Printf("JOIN Result: Encounter=%s, Patient=%s, Practitioner=%s\n",
+						result.EncounterID, result.PatientID, result.PractitionerID)
+				}
+			}
+		}
+	}
+
+	// Final counts and summary
+	fmt.Println("\n=== Final Summary ===")
+	fmt.Printf("Total Encounters: %d\n", countByCollection(cluster, "encounters"))
+	fmt.Printf("Total Patients: %d\n", countByCollection(cluster, "patients"))
+	fmt.Printf("Total Practitioners: %d\n", countByCollection(cluster, "practitioners"))
+
+	// Count valid patient and practitioner references found in encounters
+	validPatientRefs := countValidReferencesInEncounters(cluster, "Patient")
+	validPractitionerRefs := countValidReferencesInEncounters(cluster, "Practitioner")
+	fmt.Printf("Valid Patient references found in encounters: %d\n", validPatientRefs)
+	fmt.Printf("Valid Practitioner references found in encounters: %d\n", validPractitionerRefs)
+
+	// Debug: Show some actual IDs from collections
+	fmt.Println("\n=== Debug: Sample IDs from Collections ===")
+	allPatientIDs := listIDsByCollection(cluster, "patients")
+	allPractitionerIDs := listIDsByCollection(cluster, "practitioners")
+
+	fmt.Printf("First 5 Patient IDs: %v\n", allPatientIDs[:min(5, len(allPatientIDs))])
+	fmt.Printf("First 5 Practitioner IDs: %v\n", allPractitionerIDs[:min(5, len(allPractitionerIDs))])
 }
 
-// countByType counts the number of resources by type
-func countByType(cluster *gocb.Cluster, rt string) int {
-	q := "SELECT COUNT(*) AS cnt FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt"
-	r, err := cluster.Query(q, &gocb.QueryOptions{
-		NamedParameters: map[string]interface{}{"rt": rt},
-	})
+// countByCollection counts the number of resources by collection
+func countByCollection(cluster *gocb.Cluster, collection string) int {
+	q := fmt.Sprintf("SELECT COUNT(*) AS cnt FROM `EvTeChallenge`.`_default`.`%s`", collection)
+	r, err := cluster.Query(q, &gocb.QueryOptions{})
 	if err != nil {
-		fmt.Printf("countByType query error: %v\n", err)
+		fmt.Printf("countByCollection query error: %v\n", err)
 		return 0
 	}
 	defer r.Close()
@@ -165,10 +225,10 @@ func countByType(cluster *gocb.Cluster, rt string) int {
 	return count
 }
 
-// existsByTypeAndID checks if a resource exists by type and ID
-func existsByTypeAndID(cluster *gocb.Cluster, rt, id string) bool {
-	q := "SELECT 1 FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt AND d.`id`=$id LIMIT 1"
-	r, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": rt, "id": id}})
+// existsByCollectionAndID checks if a resource exists by collection and ID
+func existsByCollectionAndID(cluster *gocb.Cluster, collection, id string) bool {
+	q := fmt.Sprintf("SELECT 1 FROM `EvTeChallenge`.`_default`.`%s` AS d WHERE d.`id`=$id LIMIT 1", collection)
+	r, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"id": id}})
 	if err != nil {
 		return false
 	}
@@ -176,10 +236,10 @@ func existsByTypeAndID(cluster *gocb.Cluster, rt, id string) bool {
 	return r.Next()
 }
 
-// listIDsByType lists all IDs by type
-func listIDsByType(cluster *gocb.Cluster, rt string) []string {
-	q := "SELECT d.`id` AS id FROM `evtechallenge` AS d WHERE d.`resourceType`=$rt"
-	r, err := cluster.Query(q, &gocb.QueryOptions{NamedParameters: map[string]interface{}{"rt": rt}})
+// listIDsByCollection lists all IDs by collection
+func listIDsByCollection(cluster *gocb.Cluster, collection string) []string {
+	q := fmt.Sprintf("SELECT d.`id` AS id FROM `EvTeChallenge`.`_default`.`%s` AS d", collection)
+	r, err := cluster.Query(q, &gocb.QueryOptions{})
 	if err != nil {
 		return nil
 	}
@@ -196,6 +256,42 @@ func listIDsByType(cluster *gocb.Cluster, rt string) []string {
 	return ids
 }
 
+// countValidReferencesInEncounters counts how many encounters have valid references to the specified resource type
+func countValidReferencesInEncounters(cluster *gocb.Cluster, resourceType string) int {
+	var fieldName string
+	if resourceType == "Patient" {
+		fieldName = "subjectPatientId"
+	} else if resourceType == "Practitioner" {
+		fieldName = "practitionerIds"
+	} else {
+		return 0
+	}
+
+	var query string
+	if resourceType == "Patient" {
+		query = fmt.Sprintf("SELECT COUNT(*) AS cnt FROM `EvTeChallenge`.`_default`.`encounters` WHERE %s IS NOT NULL AND %s != ''", fieldName, fieldName)
+	} else {
+		query = fmt.Sprintf("SELECT COUNT(*) AS cnt FROM `EvTeChallenge`.`_default`.`encounters` WHERE %s IS NOT NULL AND ARRAY_LENGTH(%s) > 0", fieldName, fieldName)
+	}
+
+	r, err := cluster.Query(query, &gocb.QueryOptions{})
+	if err != nil {
+		return 0
+	}
+	defer r.Close()
+
+	var count int
+	for r.Next() {
+		var row struct {
+			Cnt int `json:"cnt"`
+		}
+		if err := r.Row(&row); err == nil {
+			count = row.Cnt
+		}
+	}
+	return count
+}
+
 // contains checks if an array contains a value
 func contains(arr []string, v string) bool {
 	for _, x := range arr {
@@ -204,6 +300,14 @@ func contains(arr []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // extractIDFromEncounter extracts the ID from an encounter

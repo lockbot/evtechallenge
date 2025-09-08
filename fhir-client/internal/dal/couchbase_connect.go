@@ -122,7 +122,7 @@ func getConnOrGenConn() (*Connection, error) {
 	couchbaseURL := getEnvOrDefault("COUCHBASE_URL", "couchbase://evt-db")
 	username := getEnvOrDefault("COUCHBASE_USERNAME", "evtechallenge_user")
 	password := getEnvOrDefault("COUCHBASE_PASSWORD", "password")
-	bucketName := getEnvOrDefault("COUCHBASE_BUCKET", "evtechallenge")
+	bucketName := getEnvOrDefault("COUCHBASE_BUCKET", "EvTeChallenge")
 
 	cluster, err := gocb.Connect(couchbaseURL, gocb.ClusterOptions{
 		Authenticator: gocb.PasswordAuthenticator{
@@ -142,10 +142,10 @@ func getConnOrGenConn() (*Connection, error) {
 
 	bucket := cluster.Bucket(bucketName)
 
-	// Wait for the bucket to be ready for KV operations only
+	// Wait for the bucket to be ready for KV and Query operations
 	err = bucket.WaitUntilReady(90*time.Second, &gocb.WaitUntilReadyOptions{
 		Context:      context.Background(),
-		ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue},
+		ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("couchbase bucket not ready: %w", err)

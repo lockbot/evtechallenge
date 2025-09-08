@@ -37,7 +37,7 @@ Variáveis de ambiente:
 - `COUCHBASE_URL=couchbase://evt-db`
 - `COUCHBASE_USERNAME=evtechallenge_user`
 - `COUCHBASE_PASSWORD=password`
-- `COUCHBASE_BUCKET=evtechallenge`
+- `COUCHBASE_BUCKET=EvTeChallenge`
 - `FHIR_PORT=8081`
 - `FHIR_LOG_LEVEL=info`
 - `FHIR_BASE_URL=http://hapi.fhir.org/baseR4`

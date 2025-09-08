@@ -36,7 +36,7 @@ Environment variables:
 - `COUCHBASE_URL=couchbase://evt-db`
 - `COUCHBASE_USERNAME=evtechallenge_user`
 - `COUCHBASE_PASSWORD=password`
-- `COUCHBASE_BUCKET=evtechallenge`
+- `COUCHBASE_BUCKET=EvTeChallenge`
 - `API_PORT=8080`
 - `API_LOG_LEVEL=info`
 - `ELASTICSEARCH_URL=http://elasticsearch:9200`

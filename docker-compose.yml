@@ -33,7 +33,7 @@ services:
       - COUCHBASE_ADMINISTRATOR_PASSWORD=${COUCHBASE_ADMINISTRATOR_PASSWORD:-password}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
-      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-EvTeChallenge}
     volumes:
       - couchbase_data:/tmp/db-init-flag
       - ./scripts/couchbase-setup.sh:/scripts/couchbase-setup.sh:ro
@@ -61,7 +61,7 @@ services:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
-      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-EvTeChallenge}
       - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH:-false}
       - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS:-false}
       - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS:-false}
@@ -99,7 +99,7 @@ services:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
       - COUCHBASE_PASSWORD=${COUCHBASE_PASSWORD:-password}
-      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-evtechallenge}
+      - COUCHBASE_BUCKET=${COUCHBASE_BUCKET:-EvTeChallenge}
       - ENABLE_ELASTICSEARCH=${ENABLE_ELASTICSEARCH:-false}
       - ENABLE_SYSTEM_METRICS=${ENABLE_SYSTEM_METRICS:-false}
       - ENABLE_BUSINESS_METRICS=${ENABLE_BUSINESS_METRICS:-false}
