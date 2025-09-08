@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/couchbase/gocb/v2"
 	"github.com/rs/zerolog/log"
 	"stealthcompany.com/api-rest/internal/dal"
 )
@@ -20,8 +19,7 @@ func WaitForFHIRIngestion(ctx context.Context) error {
 	}
 	defer dal.ReturnConnection(conn) // Return connection to pool
 
-	bucket := conn.GetBucket()
-	collection := bucket.DefaultCollection()
+	ingestionModel := dal.NewIngestionStatusModel(conn)
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -31,7 +29,7 @@ func WaitForFHIRIngestion(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			ready, err := checkIngestionStatus(collection)
+			ready, err := ingestionModel.IsDefaultScopeIngestionReady(ctx)
 			if err != nil {
 				log.Error().Err(err).Msg("Error checking ingestion status")
 				continue
@@ -45,24 +43,4 @@ func WaitForFHIRIngestion(ctx context.Context) error {
 			log.Info().Msg("FHIR ingestion still in progress, waiting...")
 		}
 	}
-}
-
-// checkIngestionStatus checks if FHIR ingestion is complete
-func checkIngestionStatus(collection *gocb.Collection) (bool, error) {
-	result, err := collection.Get(IngestionStatusKey, &gocb.GetOptions{})
-	if err != nil {
-		// Check if it's a key not found error (simplified check)
-		if err.Error() == "document not found" {
-			// Ingestion status document doesn't exist yet
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to get ingestion status: %w", err)
-	}
-
-	var status IngestionStatus
-	if err := result.Content(&status); err != nil {
-		return false, fmt.Errorf("failed to parse ingestion status: %w", err)
-	}
-
-	return status.Ready, nil
 }

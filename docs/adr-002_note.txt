@@ -1,0 +1,38 @@
+```create_scope_and_set_query_context_to_bucket.scope & create_collections
+// Assume Travel bucket is already created
+CREATE SCOPE Travel.Inventory;
+set query_context = "default:Travel.Inventory"
+
+CREATE COLLECTION Route;
+CREATE COLLECTION Airport;
+```
+```insert_json_docs_into_collections
+INSERT INTO Airport (key, value) VALUES ("id:10", {
+  "id": "10", "city" : "Toulouse", "faa": "TLS"});
+
+INSERT INTO Airport (key, value) VALUES ("id:11", {
+  "id": "11", "city" : "Bordeaux", "faa": "BOD"});
+
+INSERT INTO Route (key, value) VALUES ("id:1", {
+  "id": "1", "airline" : "AF", "sourceairport": "TLS",
+  "destinationairport":"BOD"});
+```
+```create_indexes_on_collections
+CREATE INDEX route_airports ON Route(sourceairport, destinationairport);
+
+CREATE INDEX airport_city ON Airport(city);
+```
+```query_simplified_compared_to_old_query_statement (THE GOOD ONE)
+SELECT r.destinationairport
+FROM Airport a
+JOIN Route r ON a.faa = r.sourceairport
+WHERE a.city = "Toulouse";
+```
+´´´old-query-statement (this is old, not our intention)
+SELECT r.destinationairport
+FROM Travel a
+JOIN Travel r ON a.faa = r.sourceairport
+  AND r.type = "route"
+WHERE a.city = "Toulouse"
+  AND a.type = "airport";
+´´´
