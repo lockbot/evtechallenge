@@ -83,7 +83,7 @@ FHIR_BASE_URL=http://hapi.fhir.org/baseR4
 FHIR_TIMEOUT=30s
 
 # Couchbase Configuration
-COUCHBASE_URL=evtechallenge-db://evtechallenge-db
+COUCHBASE_URL=couchbase://evt-db
 COUCHBASE_ADMINISTRATOR_USERNAME=Administrator
 COUCHBASE_ADMINISTRATOR_PASSWORD=password
 COUCHBASE_USERNAME=evtechallenge_user
@@ -107,7 +107,56 @@ ELASTICSEARCH_TRANSPORT_PORT=9300
 
 # Prometheus Configuration (optional - defaults work)
 PROMETHEUS_PORT=9090
+
+# Keycloak Configuration
+KEYCLOAK_URL=http://keycloak:8080
+KEYCLOAK_PORT=8082
+KEYCLOAK_REALM=evtechallenge
+KEYCLOAK_CLIENT_ID=api-client
+KEYCLOAK_CLIENT_SECRET=
+KEYCLOAK_ADMIN_USER=admin
+KEYCLOAK_ADMIN_PASSWORD=admin
+# Note: These map to KC_BOOTSTRAP_ADMIN_USERNAME and KC_BOOTSTRAP_ADMIN_PASSWORD in docker-compose.yml
+KEYCLOAK_LOG_LEVEL=INFO
+
+# Tenant Configuration
+TENANT1_USERNAME=tenant1
+TENANT1_PASSWORD=tnt1
+TENANT2_USERNAME=tenant2
+TENANT2_PASSWORD=tnt2
 ```
+
+## API Endpoints
+
+### Authentication (No tenant required)
+- `POST /auth/login` - User login
+- `POST /auth/refresh` - Refresh token
+- `GET /auth/userinfo` - Get user information
+- `GET /health` - System health check
+
+### FHIR Resources (Tenant-based routing)
+- `GET /api/{tenant}/encounters` - List encounters for tenant
+- `GET /api/{tenant}/encounters/{id}` - Get specific encounter
+- `GET /api/{tenant}/patients` - List patients for tenant
+- `GET /api/{tenant}/patients/{id}` - Get specific patient
+- `GET /api/{tenant}/practitioners` - List practitioners for tenant
+- `GET /api/{tenant}/practitioners/{id}` - Get specific practitioner
+
+### Review System (Tenant-based routing)
+- `POST /api/{tenant}/review-request` - Submit review request
+
+### System
+- `GET /` - API information
+- `GET /metrics` - Prometheus metrics
+
+### Legacy Endpoints (Deprecated - use X-Tenant-ID header)
+- `GET /legacy/encounters` - List encounters (legacy)
+- `GET /legacy/patients` - List patients (legacy)
+- `GET /legacy/practitioners` - List practitioners (legacy)
+- `POST /legacy/review-request` - Submit review request (legacy)
+
+### Authentication
+All tenant-based endpoints require JWT authentication via `Authorization: Bearer <token>` header. The tenant in the URL path must match the tenant in the JWT token.
 
 ## Technical Decisions
 
@@ -121,11 +170,6 @@ PROMETHEUS_PORT=9090
 - **Fault Isolation**: API failures don't affect data ingestion
 - **Deployment Flexibility**: Can deploy updates independently
 - **Resource Optimization**: Different resource requirements for each service
-
-**Future Benefits**:
-- Scheduled ingestion runs (daily/weekly) without API impact
-- Multiple ingestion sources without API changes
-- API can serve data while ingestion is running
 
 #### **Couchbase as Primary Database**
 **Decision**: Use Couchbase for data persistence instead of traditional RDBMS.
@@ -287,6 +331,7 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 - **API REST**: [api-rest/README.md](api-rest/README.md)
 - **FHIR Client**: [fhir-client/README.md](fhir-client/README.md)
 - **Docker Compose**: [docker-compose.yml](docker-compose.yml)
+- **Keycloak Setup**: [docs/keycloak-setup.md](docs/keycloak-setup.md)
 - **ADR (Architecture Decision Records)**: [docs/README.md](docs/README.md)
 
 ## Security & Future Enhancements
@@ -296,10 +341,3 @@ curl https://hapi.fhir.org/baseR4/Patient?_count=1
 - **Input validation** on all API endpoints
 - **Environment variables** for sensitive configuration
 - **No hardcoded credentials** in source code
-
-**Future Enhancements**:
-- **Scheduled Ingestion**: Daily/weekly data refresh
-- **AI Enrichment**: Machine learning data enhancement
-- **Advanced Analytics**: Complex query capabilities
-- **Audit Trails**: Comprehensive access logging
-- **API Rate Limiting**: Tenant-based usage controls

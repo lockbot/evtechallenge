@@ -52,10 +52,28 @@ A decisão de usar modelagem desnormalizada foi baseada nas seguintes razões:
 ```json
 {
   "tenantId": "tenant-abc",
-  "reviews": {
-    "encounter-123": {
-      "reviewed": true,
-      "reviewTime": "2024-01-15T10:30:00Z"
+  "encounters": {
+    "Encounter/encounter-123": {
+      "reviewRequested": true,
+      "reviewTime": "2024-01-15T10:30:00Z",
+      "entityType": "Encounter",
+      "entityID": "encounter-123"
+    }
+  },
+  "patients": {
+    "Patient/patient-456": {
+      "reviewRequested": true,
+      "reviewTime": "2024-01-15T10:30:00Z",
+      "entityType": "Patient",
+      "entityID": "patient-456"
+    }
+  },
+  "practitioners": {
+    "Practitioner/practitioner-789": {
+      "reviewRequested": true,
+      "reviewTime": "2024-01-15T10:30:00Z",
+      "entityType": "Practitioner",
+      "entityID": "practitioner-789"
     }
   },
   "updated": "2024-01-15T10:30:00Z"

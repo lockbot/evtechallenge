@@ -1,7 +1,6 @@
 package api
 
 import (
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -19,6 +18,7 @@ type TenantChannels struct {
 	cooldownCh          chan struct{}
 	timerResetCh        chan struct{}
 	responsePool        *ResponsePool
+	pseudoClosed        bool
 }
 
 // RequestMessage contains the request data and response channel key
@@ -37,16 +37,53 @@ type ResponseMessage struct {
 	Error error
 }
 
-var tenantChannels = make(map[string]*TenantChannels)
-var channelsMutex sync.RWMutex
+// Global state management for all tenant channels
+type TenantChannelManager struct {
+	channels map[string]*TenantChannels
+}
+
+var tenantChannelManager = &TenantChannelManager{
+	channels: make(map[string]*TenantChannels),
+}
 
 // AutoWarmUpTenant automatically warms up a tenant on first request
 func AutoWarmUpTenant(tenantID string) *TenantChannels {
-	channelsMutex.Lock()
-	defer channelsMutex.Unlock()
+	// Check if channels exist
+	channels, exists := tenantChannelManager.channels[tenantID]
+
+	if exists {
+		// Check if this tenant's channels are pseudo-closed
+		if channels.pseudoClosed {
+			// Just reset the flag, don't create new channels
+			channels.pseudoClosed = false
+			log.Info().
+				Str("tenant", tenantID).
+				Msg("Tenant channels pseudo-closed, resetting flag")
+			// Restart both goroutines since they were stopped
+			go channels.processMessages()
+			go channels.manageTimer()
+			return channels
+		}
+		return channels
+	}
+
+	// Double-check in case another goroutine created them while we were waiting
+	if channels, exists := tenantChannelManager.channels[tenantID]; exists {
+		if channels.pseudoClosed {
+			channels.pseudoClosed = false
+			log.Info().
+				Str("tenant", tenantID).
+				Msg("Tenant channels pseudo-closed, resetting flag")
+			// Restart both goroutines since they were stopped
+			go channels.processMessages()
+			go channels.manageTimer()
+			return channels
+		}
+		return channels
+	}
 
 	// Create channels for this tenant
-	channels := &TenantChannels{
+	channels = &TenantChannels{
 		getEncounterCh:      make(chan RequestMessage),
 		listEncountersCh:    make(chan RequestMessage),
 		getPatientCh:        make(chan RequestMessage),
@@ -57,9 +94,10 @@ func AutoWarmUpTenant(tenantID string) *TenantChannels {
 		cooldownCh:          make(chan struct{}),
 		timerResetCh:        make(chan struct{}),
 		responsePool:        NewResponsePool(5),
+		pseudoClosed:        false,
 	}
 
-	tenantChannels[tenantID] = channels
+	tenantChannelManager.channels[tenantID] = channels
 
 	// Start worker goroutine
 	go channels.processMessages()
@@ -95,9 +133,7 @@ func (tc *TenantChannels) manageTimer() {
 
 // GetTenantChannels returns the channels for a tenant if they exist
 func GetTenantChannels(tenantID string) (*TenantChannels, bool) {
-	channelsMutex.RLock()
-	defer channelsMutex.RUnlock()
-	channels, exists := tenantChannels[tenantID]
+	channels, exists := tenantChannelManager.channels[tenantID]
 	return channels, exists
 }
 
@@ -107,6 +143,24 @@ func (tc *TenantChannels) ResetTimer() {
 	case tc.timerResetCh <- struct{}{}:
 		// Timer reset successfully
 	default:
-		// Channel might be closed, ignore
+		// Channel might be pseudo-closed, ignore
 	}
+}
+
+// SetPseudoClosed sets the pseudo-closed flag for a specific tenant
+func (tc *TenantChannels) SetPseudoClosed() {
+	tc.pseudoClosed = true
+	log.Info().Msg("Tenant channels marked as pseudo-closed")
+}
+
+// CleanupAllChannels performs graceful shutdown cleanup
+func CleanupAllChannels() {
+	for tenantID, channels := range tenantChannelManager.channels {
+		channels.cleanupChannels()
+		log.Info().Str("tenant", tenantID).Msg("Tenant channels cleaned up")
+	}
+
+	// Clear the map
+	tenantChannelManager.channels = make(map[string]*TenantChannels)
+	log.Info().Msg("All tenant channels cleaned up during shutdown")
 }

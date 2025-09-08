@@ -38,6 +38,7 @@ Environment variables:
 - `COUCHBASE_PASSWORD=password`
 - `COUCHBASE_BUCKET=evtechallenge`
 - `API_PORT=8080`
+- `API_LOG_LEVEL=info`
 - `ELASTICSEARCH_URL=http://elasticsearch:9200`
 
 

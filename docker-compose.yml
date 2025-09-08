@@ -1,6 +1,6 @@
 services:
   # Couchbase Database
-  evt-db:
+  couchbase:
     image: couchbase:community-7.6.2
     container_name: evt-db
     ports:
@@ -22,11 +22,11 @@ services:
       retries: 5
 
   # Couchbase Setup Service (runs once to create bucket and user)
-  evt-db-setup:
+  couchbase-setup:
     image: couchbase:community-7.6.2
     container_name: evt-db-setup
     depends_on:
-      evt-db:
+      couchbase:
         condition: service_healthy
     environment:
       - COUCHBASE_ADMINISTRATOR_USERNAME=${COUCHBASE_ADMINISTRATOR_USERNAME:-Administrator}
@@ -51,7 +51,11 @@ services:
     ports:
       - "${API_PORT}:${API_PORT}"
     depends_on:
-      evt-db-setup:
+      couchbase-setup:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+      keycloak-setup:
         condition: service_completed_successfully
     environment:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
@@ -64,6 +68,16 @@ services:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
       - API_PORT=${API_PORT:-8080}
       - API_LOG_LEVEL=${API_LOG_LEVEL:-info}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-evtechallenge}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-api-client}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
+      - KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - TENANT1_USERNAME=${TENANT1_USERNAME:-tenant1}
+      - TENANT1_PASSWORD=${TENANT1_PASSWORD:-tnt1}
+      - TENANT2_USERNAME=${TENANT2_USERNAME:-tenant2}
+      - TENANT2_PASSWORD=${TENANT2_PASSWORD:-tnt2}
     networks:
       - evtechallenge_network
     restart: unless-stopped
@@ -77,8 +91,10 @@ services:
     ports:
       - "${FHIR_PORT}:${FHIR_PORT}"
     depends_on:
-      evt-db-setup:
+      couchbase-setup:
         condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
     environment:
       - COUCHBASE_URL=${COUCHBASE_URL:-couchbase://evt-db}
       - COUCHBASE_USERNAME=${COUCHBASE_USERNAME:-evtechallenge_user}
@@ -92,6 +108,64 @@ services:
       - FHIR_TIMEOUT=${FHIR_TIMEOUT:-30s}
       - FHIR_PORT=${FHIR_PORT:-8081}
       - FHIR_LOG_LEVEL=${FHIR_LOG_LEVEL:-info}
+    networks:
+      - evtechallenge_network
+    restart: "no"
+
+  # Keycloak Authentication Service
+  keycloak:
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+    container_name: evt-iam
+    ports:
+      - "${KEYCLOAK_PORT:-8082}:8080"
+    # - "9000:9000"  # Keycloak management port - internal only
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_DB=dev-file
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_ENABLED=true
+      - KC_HEALTH_ENABLED=true
+      - KC_METRICS_ENABLED=true
+      - KC_LOG_LEVEL=${KEYCLOAK_LOG_LEVEL:-INFO}
+      - KC_FEATURES=token-exchange,admin-fine-grained-authz
+    command: ["start-dev"]
+    networks:
+      - evtechallenge_network
+    # Healthcheck disabled - using external HTTP monitoring in setup script instead
+    # Following Keycloak docs: "external HTTP requests should be used for health checks"
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 5
+    #   start_period: 60s
+    restart: unless-stopped
+
+  # Keycloak Setup Service (runs once to create realm, client, and users)
+  keycloak-setup:
+    image: curlimages/curl:latest
+    container_name: evt-iam-setup
+    depends_on:
+      keycloak:
+        condition: service_started
+    environment:
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
+      - KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-evtechallenge}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-api-client}
+      - TENANT1_USERNAME=${TENANT1_USERNAME:-tenant1}
+      - TENANT1_PASSWORD=${TENANT1_PASSWORD:-tnt1}
+      - TENANT2_USERNAME=${TENANT2_USERNAME:-tenant2}
+      - TENANT2_PASSWORD=${TENANT2_PASSWORD:-tnt2}
+    volumes:
+      - keycloak_data:/tmp/keycloak-init-flag
+      - ./scripts/setup-keycloak.sh:/scripts/setup-keycloak.sh:ro
+    command: ["/bin/sh", "/scripts/setup-keycloak.sh"]
     networks:
       - evtechallenge_network
     restart: "no"
@@ -117,8 +191,6 @@ services:
       timeout: 10s
       retries: 12
       start_period: 30s
-    profiles:
-      - observability
 
   # Prometheus for metrics
   prometheus:
@@ -162,6 +234,7 @@ volumes:
   prometheus_data:
   grafana_data:
   couchbase_data:
+  keycloak_data:
 
 networks:
   evtechallenge_network:

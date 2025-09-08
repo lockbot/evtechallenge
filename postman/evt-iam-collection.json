@@ -1,0 +1,613 @@
+{
+	"info": {
+		"_postman_id": "evt-iam-collection",
+		"name": "EVTeChallenge - Keycloak Authentication",
+		"description": "Complete collection for testing Keycloak authentication with the evtechallenge API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Get Access Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Parse the response",
+									"const responseJson = pm.response.json();",
+									"",
+									"// Check if we got an access token",
+									"if (responseJson.access_token) {",
+									"    // Store both access and refresh tokens in environment",
+									"    pm.environment.set('access_token', responseJson.access_token);",
+									"    pm.environment.set('refresh_token', responseJson.refresh_token);",
+									"    pm.environment.set('token_expires_at', Date.now() + (responseJson.expires_in * 1000));",
+									"    ",
+									"    console.log('Access token stored successfully');",
+									"    console.log('Refresh token stored successfully');",
+									"    console.log('Token expires at:', new Date(pm.environment.get('token_expires_at')));",
+									"} else {",
+									"    console.error('No access token in response');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "password"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "client_secret",
+									"value": "{{client_secret}}"
+								},
+								{
+									"key": "username",
+									"value": "{{username}}"
+								},
+								{
+									"key": "password",
+									"value": "{{password}}"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{keycloak_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "Get an access token using password grant type"
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Parse the response",
+									"const responseJson = pm.response.json();",
+									"",
+									"// Check if we got a new access token",
+									"if (responseJson.access_token) {",
+									"    // Store the new access token in environment",
+									"    pm.environment.set('access_token', responseJson.access_token);",
+									"    pm.environment.set('token_expires_at', Date.now() + (responseJson.expires_in * 1000));",
+									"    ",
+									"    console.log('Access token refreshed successfully');",
+									"    console.log('New token expires at:', new Date(pm.environment.get('token_expires_at')));",
+									"} else {",
+									"    console.error('No access token in refresh response');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "refresh_token"
+								},
+								{
+									"key": "client_id",
+									"value": "{{client_id}}"
+								},
+								{
+									"key": "client_secret",
+									"value": "{{client_secret}}"
+								},
+								{
+									"key": "refresh_token",
+									"value": "{{refresh_token}}"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+							"host": [
+								"{{keycloak_url}}"
+							],
+							"path": [
+								"realms",
+								"{{realm}}",
+								"protocol",
+								"openid-connect",
+								"token"
+							]
+						},
+						"description": "Refresh an access token using refresh token"
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for getting and refreshing tokens"
+		},
+		{
+			"name": "API Endpoints",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Check if token is expired or missing",
+							"const currentToken = pm.environment.get('access_token');",
+							"const tokenExpiresAt = pm.environment.get('token_expires_at');",
+							"const refreshToken = pm.environment.get('refresh_token');",
+							"",
+							"// If token is expired or missing, try to refresh it",
+							"if (!currentToken || !tokenExpiresAt || Date.now() > tokenExpiresAt) {",
+							"    console.log('Token expired or missing, attempting refresh...');",
+							"    ",
+							"    if (refreshToken) {",
+							"        // Try refresh token first",
+							"        pm.sendRequest({",
+							"            url: pm.environment.get('keycloak_url') + '/realms/' + pm.environment.get('realm') + '/protocol/openid-connect/token',",
+							"            method: 'POST',",
+							"            header: {",
+							"                'Content-Type': 'application/x-www-form-urlencoded'",
+							"            },",
+							"            body: {",
+							"                mode: 'urlencoded',",
+							"                urlencoded: [",
+							"                    { key: 'grant_type', value: 'refresh_token' },",
+							"                    { key: 'client_id', value: pm.environment.get('client_id') },",
+							"                    { key: 'client_secret', value: pm.environment.get('client_secret') },",
+							"                    { key: 'refresh_token', value: refreshToken }",
+							"                ]",
+							"            }",
+							"        }, function (err, response) {",
+							"            if (err || !response || response.code !== 200) {",
+							"                console.log('Refresh token failed, falling back to password grant...');",
+							"                if (err) {",
+							"                    console.error('Refresh token error:', err);",
+							"                } else if (response) {",
+							"                    console.error('Refresh token response error:', response.code, response.text());",
+							"                }",
+							"                // Fallback to password grant",
+							"                pm.sendRequest({",
+							"                    url: pm.environment.get('keycloak_url') + '/realms/' + pm.environment.get('realm') + '/protocol/openid-connect/token',",
+							"                    method: 'POST',",
+							"                    header: {",
+							"                        'Content-Type': 'application/x-www-form-urlencoded'",
+							"                    },",
+							"                    body: {",
+							"                        mode: 'urlencoded',",
+							"                        urlencoded: [",
+							"                            { key: 'grant_type', value: 'password' },",
+							"                            { key: 'client_id', value: pm.environment.get('client_id') },",
+							"                            { key: 'client_secret', value: pm.environment.get('client_secret') },",
+							"                            { key: 'username', value: pm.environment.get('username') },",
+							"                            { key: 'password', value: pm.environment.get('password') }",
+							"                        ]",
+							"                    }",
+							"                }, function (err2, response2) {",
+							"                    if (err2 || !response2 || response2.code !== 200) {",
+							"                        if (err2) {",
+							"                            console.error('Password grant error:', err2);",
+							"                        } else if (response2) {",
+							"                            console.error('Password grant response error:', response2.code, response2.text());",
+							"                        } else {",
+							"                            console.error('Password grant failed: no response');",
+							"                        }",
+							"                        return;",
+							"                    }",
+							"                    ",
+							"                    const tokenData = response2.json();",
+							"                    pm.environment.set('access_token', tokenData.access_token);",
+							"                    pm.environment.set('refresh_token', tokenData.refresh_token);",
+							"                    pm.environment.set('token_expires_at', Date.now() + (tokenData.expires_in * 1000));",
+							"                    console.log('New tokens obtained via password grant');",
+							"                });",
+							"            } else {",
+							"                const tokenData = response.json();",
+							"                pm.environment.set('access_token', tokenData.access_token);",
+							"                pm.environment.set('refresh_token', tokenData.refresh_token);",
+							"                pm.environment.set('token_expires_at', Date.now() + (tokenData.expires_in * 1000));",
+							"                console.log('Tokens refreshed successfully');",
+							"            }",
+							"        });",
+							"    } else {",
+							"        console.error('No refresh token available and current token is expired!');",
+							"    }",
+							"}",
+							"",
+							"// Set Authorization header for the current request",
+							"pm.request.headers.add({",
+							"    key: 'Authorization',",
+							"    value: 'Bearer ' + pm.environment.get('access_token')",
+							"});",
+							"",
+							"// Set X-Tenant-ID header",
+							"pm.request.headers.add({",
+							"    key: 'X-Tenant-ID',",
+							"    value: pm.environment.get('username')",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"item": [
+				{
+					"name": "Root",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Get API root information"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Patients",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/patients",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"patients"
+							]
+						},
+						"description": "Get list of patients"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Patient by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/patients/{{codeonly_patient_id}}",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"patients",
+								"{{codeonly_patient_id}}"
+							]
+						},
+						"description": "Get a specific patient by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Encounters",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/encounters",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"encounters"
+							]
+						},
+						"description": "Get list of encounters"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Encounter by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/encounters/{{codeonly_encounter_id}}",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"encounters",
+								"{{codeonly_encounter_id}}"
+							]
+						},
+						"description": "Get a specific encounter by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Practitioners",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/practitioners",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"practitioners"
+							]
+						},
+						"description": "Get list of practitioners"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Practitioner by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/practitioners/{{codeonly_practitioner_id}}",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"practitioners",
+								"{{codeonly_practitioner_id}}"
+							]
+						},
+						"description": "Get a specific practitioner by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Review Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"entity\": \"encounter\",\n  \"id\": \"{{encounter_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/api/{{tenant_id}}/review-request",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"api",
+								"{{tenant_id}}",
+								"review-request"
+							]
+						},
+						"description": "Create a new review request"
+					},
+					"response": []
+				}
+			],
+			"description": "API endpoints for FHIR resources and review requests"
+		},
+		{
+			"name": "Health & Metrics",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/health",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Check API health status"
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/metrics",
+							"host": [
+								"{{api_url}}"
+							],
+							"path": [
+								"metrics"
+							]
+						},
+						"description": "Get Prometheus metrics"
+					},
+					"response": []
+				}
+			],
+			"description": "Health check and metrics endpoints"
+		}
+	],
+	"variable": [
+		{
+			"key": "api_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "keycloak_url",
+			"value": "http://localhost:8082",
+			"type": "string"
+		},
+		{
+			"key": "realm",
+			"value": "evtechallenge",
+			"type": "string"
+		},
+		{
+			"key": "client_id",
+			"value": "api-client",
+			"type": "string"
+		},
+		{
+			"key": "client_secret",
+			"value": "YOUR_CLIENT_SECRET_HERE",
+			"type": "string"
+		},
+		{
+			"key": "username",
+			"value": "tenant1",
+			"type": "string"
+		},
+		{
+			"key": "password",
+			"value": "tnt1",
+			"type": "string"
+		},
+		{
+			"key": "tenant_id",
+			"value": "tenant1",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "token_expires_at",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "patient_id",
+			"value": "Patient/1854517",
+			"type": "string"
+		},
+		{
+			"key": "encounter_id",
+			"value": "Encounter/104474",
+			"type": "string"
+		},
+		{
+			"key": "practitioner_id",
+			"value": "Practitioner/0a61cb66-750b-464e-8a5e-7af0340a4c2f",
+			"type": "string"
+		},
+		{
+			"key": "codeonly_patient_id",
+			"value": "1854517",
+			"type": "string"
+		},
+		{
+			"key": "codeonly_encounter_id",
+			"value": "104474",
+			"type": "string"
+		},
+		{
+			"key": "codeonly_practitioner_id",
+			"value": "0a61cb66-750b-464e-8a5e-7af0340a4c2f",
+			"type": "string"
+		}
+	]
+}

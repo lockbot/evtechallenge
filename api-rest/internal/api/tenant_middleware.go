@@ -3,11 +3,24 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // TenantChannelMiddleware routes requests through tenant channels if available
 func TenantChannelMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Special handling for endpoints that don't require tenant warm-up
+		if r.URL.Path == "/" || r.URL.Path == "/metrics" || r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Skip tenant processing for auth routes
+		if strings.HasPrefix(r.URL.Path, "/auth/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		tenantID, err := GetTenantFromRequest(r)
 		if err != nil {
 			// If no tenant ID, fallback to direct processing
@@ -15,13 +28,13 @@ func TenantChannelMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Special handling for endpoints that don't require tenant warm-up
-		if r.URL.Path == "/" || r.URL.Path == "/metrics" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		if channels, exists := GetTenantChannels(tenantID); exists {
+			// Check if channels are pseudo-closed
+			if channels.pseudoClosed {
+				// Channels are pseudo-closed, need to reactivate them
+				channels = AutoWarmUpTenant(tenantID)
+			}
+
 			// Reset timer for this request
 			channels.ResetTimer()
 

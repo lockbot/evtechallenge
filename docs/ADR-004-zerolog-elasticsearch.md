@@ -28,8 +28,14 @@ A decisão de usar Zerolog com Elasticsearch foi baseada nas seguintes razões:
 
 ### Configuração Zerolog
 ```go
-logger := ecszerolog.New(os.Stdout)
-log.Logger = logger
+// Inicialização via zerolog_config
+zerolog_config.SetAppPrefix("api-rest")
+zerolog_config.StartupWithEnv(elasticsearchURL, "logs", apiLogLevel) // apiLogLevel é extraída de variável de ambiente
+
+// Internamente usa ecszerolog.New() para integração Elasticsearch
+ecsLogger := ecszerolog.New(&ElasticsearchWriter{
+    URL: elasticsearchURL + "/" + subAddress,
+})
 
 // Uso com campos estruturados
 log.Info().

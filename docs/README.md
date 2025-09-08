@@ -2,10 +2,6 @@
 
 Este diretório contém os Architecture Decision Records (ADRs) da plataforma EVT Challenge - Clinical Data Platform.
 
-## O que são ADRs?
-
-Architecture Decision Records são documentos que capturam decisões arquiteturais importantes tomadas durante o desenvolvimento do projeto, incluindo o contexto, as alternativas consideradas, e as consequências de cada decisão.
-
 ## ADRs Disponíveis
 
 ### [ADR-001: Separação de Microsserviços](./ADR-001-microsservicos-separacao.md)
@@ -20,15 +16,9 @@ Architecture Decision Records são documentos que capturam decisões arquitetura
 ### [ADR-004: Zerolog com Elasticsearch para Observabilidade](./ADR-004-zerolog-elasticsearch.md)
 **Decisão**: Utilizar Zerolog com formatação JSON e integração Elasticsearch para logging estruturado.
 
-## Como Usar
+### [ADR-005: Autenticação JWT e Roteamento Baseado em Tenant](./ADR-005-autenticacao-roteamento-tenant.md)
 
-Cada ADR segue o formato padrão:
-- **Contexto**: Situação que levou à decisão
-- **Decisão**: A decisão tomada
-- **Justificativa**: Razões para a decisão
-- **Alternativas Consideradas**: Outras opções avaliadas
-- **Consequências**: Impactos da decisão
-- **Referências**: Links e documentação relevante
+**Decisão**: Implementar autenticação JWT com Keycloak e roteamento baseado em tenant através de URLs estruturadas.
 
 ## Contribuindo
 

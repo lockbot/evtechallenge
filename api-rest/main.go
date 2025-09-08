@@ -94,6 +94,10 @@ func main() {
 		log.Error().Err(err).Msg("Server shutdown failed")
 	}
 
+	// Cleanup tenant channels
+	log.Info().Msg("Cleaning up tenant channels...")
+	api.CleanupAllChannels()
+
 	// Close database connection
 	log.Info().Msg("Closing database connection...")
 	dalConn, err := dal.GetConnOrGenConn()

@@ -9,7 +9,7 @@ import (
 
 // processMessages is the main worker function that processes messages from channels
 func (tc *TenantChannels) processMessages() {
-	defer tc.cleanupChannels()
+	defer tc.SetPseudoClosed() // Set pseudo-closed flag instead of cleanup
 
 	for {
 		select {

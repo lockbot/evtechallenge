@@ -38,7 +38,9 @@ Variáveis de ambiente:
 - `COUCHBASE_USERNAME=evtechallenge_user`
 - `COUCHBASE_PASSWORD=password`
 - `COUCHBASE_BUCKET=evtechallenge`
-- `FHIR_BASE_URL=https://hapi.fhir.org/baseR4`
+- `FHIR_PORT=8081`
+- `FHIR_LOG_LEVEL=info`
+- `FHIR_BASE_URL=http://hapi.fhir.org/baseR4`
 - `FHIR_TIMEOUT=30s`
 - `ELASTICSEARCH_URL=http://elasticsearch:9200`
 
