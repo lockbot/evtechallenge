@@ -87,13 +87,9 @@ pm.request.headers.add({
     value: "Bearer " + pm.environment.get("access_token")
 });
 
-// Set X-Tenant-ID header
-pm.request.headers.add({
-    key: "X-Tenant-ID",
-    value: pm.environment.get("username")
-});
+// Tenant is now extracted from JWT token and URL path validation
 
-// POST-REQUEST SCRIPT: Convert legacy URLs to new format
+// POST-REQUEST SCRIPT: Process response
 pm.test("Status code is 200", function () {
     pm.response.to.have.status(200);
 });
@@ -141,24 +137,6 @@ pm.test("Custom Output", function () {
 // Save to environment variable if you want to inspect
 pm.environment.set("encounter_summary", JSON.stringify(result, null, 2));
 
-// URL CONVERSION: Convert legacy URLs to new format
-// This converts /legacy/... URLs to /api/{tenant}/... format
+// URL LOGGING: Log current request URL
 const currentUrl = pm.request.url.toString();
-const tenantId = pm.environment.get("username") || "tenant1";
-
-if (currentUrl.includes("/legacy/")) {
-    const newUrl = currentUrl.replace("/legacy/", `/api/${tenantId}/`);
-    console.log("URL converted from legacy format:");
-    console.log("  Old:", currentUrl);
-    console.log("  New:", newUrl);
-    
-    // Store the converted URL for reference
-    pm.environment.set("converted_url", newUrl);
-    
-    // Note: This is just for logging - the actual request has already been made
-    // To use the new URL, you would need to make a new request with the converted URL
-    pm.test("URL Conversion Info", function () {
-        pm.expect(true).to.be.true;
-        console.log("For future requests, use the new URL format:", newUrl);
-    });
-}
+console.log("Request URL:", currentUrl);

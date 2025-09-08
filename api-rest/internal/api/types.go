@@ -30,8 +30,7 @@ type IngestionStatus struct {
 // Constants
 const (
 	// Tenant Management
-	TenantHeaderKey = "X-Tenant-ID"
-	DefaultTenant   = "default"
+	DefaultTenant = "default"
 
 	// System Document Keys
 	IngestionStatusKey = "_system/ingestion_status"

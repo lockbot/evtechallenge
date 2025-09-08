@@ -149,11 +149,6 @@ TENANT2_PASSWORD=tnt2
 - `GET /` - API information
 - `GET /metrics` - Prometheus metrics
 
-### Legacy Endpoints (Deprecated - use X-Tenant-ID header)
-- `GET /legacy/encounters` - List encounters (legacy)
-- `GET /legacy/patients` - List patients (legacy)
-- `GET /legacy/practitioners` - List practitioners (legacy)
-- `POST /legacy/review-request` - Submit review request (legacy)
 
 ### Authentication
 All tenant-based endpoints require JWT authentication via `Authorization: Bearer <token>` header. The tenant in the URL path must match the tenant in the JWT token.
@@ -196,9 +191,9 @@ All tenant-based endpoints require JWT authentication via `Authorization: Bearer
 - **Security**: Clear data boundaries between tenants
 
 **Implementation**:
-- Tenant identification via `X-Tenant-ID` header
+- Tenant identification via JWT token and URL path validation
 - Review documents stored as `Review/{tenantID}` with separate maps for each resource type
-- All API endpoints require tenant header
+- All API endpoints require JWT authentication with tenant validation
 
 ### Data Modeling Decisions
 
@@ -309,7 +304,7 @@ docker-compose restart evtechallenge-db
 docker-compose logs api
 
 # Verify database is ready
-curl http://localhost:8080/hello -H "X-Tenant-ID: test"
+curl http://localhost:8080/api/tenant1/patients
 ```
 
 #### FHIR Ingestion Issues

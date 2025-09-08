@@ -149,11 +149,6 @@ TENANT2_PASSWORD=tnt2
 - `GET /` - Informações da API
 - `GET /metrics` - Métricas do Prometheus
 
-### Endpoints Legados (Depreciados - usar header X-Tenant-ID)
-- `GET /legacy/encounters` - Listar encontros (legado)
-- `GET /legacy/patients` - Listar pacientes (legado)
-- `GET /legacy/practitioners` - Listar profissionais (legado)
-- `POST /legacy/review-request` - Enviar solicitação de revisão (legado)
 
 ### Autenticação
 Todos os endpoints baseados em tenant requerem autenticação JWT via header `Authorization: Bearer <token>`. O tenant no caminho da URL deve corresponder ao tenant no token JWT.
@@ -196,9 +191,9 @@ Todos os endpoints baseados em tenant requerem autenticação JWT via header `Au
 - **Segurança**: Limites claros de dados entre tenants
 
 **Implementação**:
-- Identificação de tenant via header `X-Tenant-ID`
+- Identificação de tenant via token JWT e validação do caminho da URL
 - Documentos de revisão armazenados como `Review/{tenantID}` com mapas separados para cada tipo de recurso
-- Todos os endpoints da API requerem header de tenant
+- Todos os endpoints da API requerem autenticação JWT com validação de tenant
 
 ### Decisões de Modelagem de Dados
 
@@ -309,7 +304,7 @@ docker-compose restart evtechallenge-db
 docker-compose logs api
 
 # Verificar se o banco está pronto
-curl http://localhost:8080/hello -H "X-Tenant-ID: test"
+curl http://localhost:8080/api/tenant1/patients
 ```
 
 #### Problemas de Ingestão FHIR

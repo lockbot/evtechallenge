@@ -10,7 +10,7 @@ Ao implementar autenticação e autorização para a plataforma de dados clínic
 
 ## Decisão
 
-Decidimos implementar autenticação JWT com Keycloak e roteamento baseado em tenant através de URLs estruturadas (`/api/{tenant}/...`), mantendo compatibilidade com o sistema anterior baseado em headers `X-Tenant-ID` através de rotas legacy.
+Decidimos implementar autenticação JWT com Keycloak e roteamento baseado em tenant através de URLs estruturadas (`/api/{tenant}/...`).
 
 ## Justificativa
 
@@ -37,11 +37,6 @@ A decisão de usar roteamento baseado em tenant foi baseada nas seguintes razõe
 /api/{tenant}/practitioners/{id} # Obter profissional específico
 /api/{tenant}/review-request    # Criar solicitação de revisão
 
-# Rotas legacy para compatibilidade (usam X-Tenant-ID header)
-/legacy/encounters              # Listar encontros (legacy)
-/legacy/patients                # Listar pacientes (legacy)
-/legacy/practitioners           # Listar profissionais (legacy)
-/legacy/review-request          # Criar solicitação de revisão (legacy)
 ```
 
 ### Autenticação JWT
@@ -79,7 +74,6 @@ A escolha do roteamento baseado em tenant traz consigo as seguintes consequênci
 
 - **Validação Dupla**: Necessário validar tenant tanto na URL quanto no JWT
 - **Roteamento Complexo**: Middleware de roteamento mais complexo para extrair tenant
-- **Migração**: Requer migração gradual de clientes existentes para nova estrutura de URLs (rotas legacy mantidas para compatibilidade)
 - **Documentação**: APIs precisam ser documentadas com exemplos de tenant
 - **Testes**: Testes precisam incluir diferentes cenários de tenant
 

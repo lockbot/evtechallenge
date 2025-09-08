@@ -80,9 +80,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, UserGroupsKey, claims.Groups)
 		ctx = context.WithValue(ctx, JWTClaimsKey, claims)
 
-		// Add tenant ID to headers for backward compatibility with existing code
-		r.Header.Set(TenantHeaderKey, tenantID)
-
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -128,7 +125,7 @@ func extractTenantFromURL(path string) (string, error) {
 
 	// Expected format: api/{tenant}/...
 	if len(parts) < 2 || parts[0] != "api" {
-		return "", errors.New("invalid URL format: expected /api/{tenant}/...")
+		return "", errors.New("invalid URL format: expected /api/{tenant}/")
 	}
 
 	tenant := parts[1]
