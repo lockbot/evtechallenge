@@ -26,20 +26,9 @@ func getResourceByID(ctx context.Context, tenantID, resourceType, id string) (ma
 		return nil, fmt.Errorf("failed to retrieve resource: %w", err)
 	}
 
-	// Check review status for this tenant
-	reviewModel := dal.NewReviewModel(resourceModel)
-	reviewInfo := reviewModel.GetReviewInfo(ctx, tenantID, resourceType, id)
-
-	response := ResponseWithReview{
-		Reviewed:   reviewInfo.Reviewed,
-		ReviewTime: reviewInfo.ReviewTime,
-		Data:       doc,
-	}
-
+	// Review fields are already embedded in the document from fhir-client ingestion
 	return map[string]interface{}{
-		"reviewed":   response.Reviewed,
-		"reviewTime": response.ReviewTime,
-		"data":       response.Data,
+		"data": doc,
 	}, nil
 }
 
@@ -76,26 +65,8 @@ func listResources(ctx context.Context, tenantID, resourceType string, page, cou
 		return nil, fmt.Errorf("failed to list resources: %w", listErr)
 	}
 
-	// Add review information to each resource
-	reviewModel := dal.NewReviewModel(resourceModel)
-	for i := range paginatedResponse.Data {
-		// Extract just the ID part from the document ID (remove resource type prefix)
-		documentID := paginatedResponse.Data[i].ID
-		resourceID := documentID
-		if strings.Contains(documentID, "/") {
-			parts := strings.Split(documentID, "/")
-			resourceID = parts[len(parts)-1] // Get the last part (the actual ID)
-		}
-
-		reviewInfo := reviewModel.GetReviewInfo(ctx, tenantID, resourceType, resourceID)
-		// Add review info to the Resource field so it appears in the JSON response
-		paginatedResponse.Data[i].Resource["reviewed"] = reviewInfo.Reviewed
-		if reviewInfo.Reviewed {
-			paginatedResponse.Data[i].Resource["reviewTime"] = reviewInfo.ReviewTime
-			paginatedResponse.Data[i].Resource["entityType"] = reviewInfo.EntityType
-			paginatedResponse.Data[i].Resource["entityID"] = reviewInfo.EntityID
-		}
-	}
+	// Review fields are already embedded in the documents from fhir-client ingestion
+	// No need to fetch review info separately
 
 	return map[string]interface{}{
 		"data":       paginatedResponse.Data,

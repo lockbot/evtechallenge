@@ -19,6 +19,7 @@ type TenantChannels struct {
 	timerResetCh        chan struct{}
 	responsePool        *ResponsePool
 	pseudoClosed        bool
+	queryContext        string // Stores the query context for this tenant's scope
 }
 
 // RequestMessage contains the request data and response channel key
@@ -95,6 +96,7 @@ func AutoWarmUpTenant(tenantID string) *TenantChannels {
 		timerResetCh:        make(chan struct{}),
 		responsePool:        NewResponsePool(5),
 		pseudoClosed:        false,
+		queryContext:        "", // Will be set by ensureTenantScope
 	}
 
 	tenantChannelManager.channels[tenantID] = channels
@@ -163,4 +165,19 @@ func CleanupAllChannels() {
 	// Clear the map
 	tenantChannelManager.channels = make(map[string]*TenantChannels)
 	log.Info().Msg("All tenant channels cleaned up during shutdown")
+}
+
+// GetTenantQueryContext returns the query context for a tenant
+func GetTenantQueryContext(tenantID string) string {
+	if channels, exists := tenantChannelManager.channels[tenantID]; exists {
+		return channels.queryContext
+	}
+	return ""
+}
+
+// SetTenantQueryContext sets the query context for a tenant
+func SetTenantQueryContext(tenantID, queryContext string) {
+	if channels, exists := tenantChannelManager.channels[tenantID]; exists {
+		channels.queryContext = queryContext
+	}
 }
