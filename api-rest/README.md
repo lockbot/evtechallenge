@@ -7,12 +7,14 @@ This service exposes a multi-tenant REST API for clinical data access and review
 
 ## Architecture Overview
 
-The API service implements a **multi-tenant architecture** with logical isolation through tenant-specific review documents. Each tenant's review state is stored separately, ensuring complete data isolation between clients.
+The API service implements a **multi-tenant architecture** with complete logical isolation through Couchbase scopes and collections. Each tenant has their own dedicated scope with separate collections, ensuring complete data isolation and automatic scalability.
 
 ### Multi-Tenant Design
-- **Tenant Identification**: All requests require `X-Tenant-ID` header
-- **Review Isolation**: Reviews are stored as separate documents (`Review/{tenantID}`)
-- **Data Access**: FHIR resources are shared, but review status is tenant-specific
+- **Tenant Scopes**: Each tenant gets their own Couchbase scope (e.g., `tenant1`, `tenant2`)
+- **Automatic Creation**: Scopes and collections are created automatically on first tenant access
+- **Data Isolation**: Complete physical separation of tenant data
+- **Review Integration**: Review fields (`reviewed`, `reviewTime`) are embedded directly in FHIR documents
+- **Performance**: Direct queries without tenant filters, leveraging native Couchbase indexes
 
 ## Quick Start
 
@@ -52,19 +54,19 @@ Environment variables:
 
 ### FHIR Resource Endpoints
 
-All endpoints require `X-Tenant-ID` header and return review status for the requesting tenant.
+All endpoints use tenant-based routing (`/api/{tenant}/...`) and return FHIR resources with embedded review status.
 
 #### Encounters
-- `GET /encounters` - List all encounters with review status
-- `GET /encounters/{id}` - Get specific encounter with review status
+- `GET /api/{tenant}/encounters` - List all encounters with embedded review status
+- `GET /api/{tenant}/encounters/{id}` - Get specific encounter with embedded review status
 
 #### Patients  
-- `GET /patients` - List all patients with review status
-- `GET /patients/{id}` - Get specific patient with review status
+- `GET /api/{tenant}/patients` - List all patients with embedded review status
+- `GET /api/{tenant}/patients/{id}` - Get specific patient with embedded review status
 
 #### Practitioners
-- `GET /practitioners` - List all practitioners with review status
-- `GET /practitioners/{id}` - Get specific practitioner with review status
+- `GET /api/{tenant}/practitioners` - List all practitioners with embedded review status
+- `GET /api/{tenant}/practitioners/{id}` - Get specific practitioner with embedded review status
 
 ### Pagination
 
@@ -75,14 +77,14 @@ All list endpoints support pagination using query parameters:
 
 **Example:**
 ```bash
-# Get first 50 encounters
-GET /encounters?count=50&page=1
+# Get first 50 encounters for tenant1
+GET /api/tenant1/encounters?count=50&page=1
 
-# Get second page of 25 patients
-GET /patients?count=25&page=2
+# Get second page of 25 patients for tenant1
+GET /api/tenant1/patients?count=25&page=2
 
-# Get first 100 practitioners (default)
-GET /practitioners
+# Get first 100 practitioners for tenant1 (default)
+GET /api/tenant1/practitioners
 ```
 
 **Paginated Response Format:**
@@ -107,33 +109,43 @@ GET /practitioners
 **Note:** Couchbase has a default limit of 100 documents per query. Use pagination to access larger datasets efficiently.
 
 ### Review Management
-- `POST /review-request` - Mark a resource for review
+- `POST /api/{tenant}/review-request` - Mark a resource for review
 
-## Multi-Tenant Review System
+## Multi-Tenant Architecture
 
-### Review Document Structure
-Each tenant has a review document with separate maps for different resource types:
+### Tenant Scope Structure
+Each tenant has their own Couchbase scope with dedicated collections:
+
+**DefaultScope** (Template Data):
+- `encounters`: Original FHIR encounter data
+- `patients`: Original FHIR patient data  
+- `practitioners`: Original FHIR practitioner data
+- `_default`: System ingestion status (`template/ingestion_status`)
+
+**Tenant Scopes** (e.g., `tenant1`, `tenant2`):
+- `encounters`: Tenant-specific encounter data with embedded review fields
+- `patients`: Tenant-specific patient data with embedded review fields
+- `practitioners`: Tenant-specific practitioner data with embedded review fields
+- `defaulty`: Tenant ingestion status (`tenant/ingestion_status`)
+
+### Review Integration
+Review fields are embedded directly in FHIR documents:
 
 ```json
 {
-  "tenantId": "tenant-abc",
-  "updated": "2024-01-15T10:30:00Z",
-  "encounters": {
-    "Encounter/456": { "reviewRequested": true, "reviewTime": "..." }
-  },
-  "patients": {
-    "Patient/123": { "reviewRequested": true, "reviewTime": "..." }
-  },
-  "practitioners": {
-    "Practitioner/789": { "reviewRequested": true, "reviewTime": "..." }
-  }
+  "id": "encounter-123",
+  "resourceType": "Encounter",
+  "reviewed": true,
+  "reviewTime": "2024-01-15T10:30:00Z",
+  "subject": { "reference": "Patient/patient-456" },
+  "participant": [...]
 }
 ```
 
 ### Review Request Endpoint
 ```bash
-POST /review-request
-Headers: X-Tenant-ID: your-tenant-id
+POST /api/tenant1/review-request
+Headers: Authorization: Bearer <jwt-token>
 Body: {
   "entity": "encounter",
   "id": "encounter-123"
@@ -141,14 +153,17 @@ Body: {
 ```
 
 ### Response Format
-All resource endpoints return review status:
+All resource endpoints return FHIR resources with embedded review status:
 
 **Individual Resource:**
 ```json
 {
+  "id": "encounter-123",
+  "resourceType": "Encounter",
   "reviewed": true,
   "reviewTime": "2024-01-15T10:30:00Z",
-  "data": { /* FHIR resource data */ }
+  "subject": { "reference": "Patient/patient-456" },
+  "participant": [...]
 }
 ```
 
@@ -157,13 +172,11 @@ All resource endpoints return review status:
 [
   {
     "id": "encounter-123",
-    "resource": {
-      "reviewed": true,
-      "reviewTime": "2024-01-15T10:30:00Z",
-      "entityType": "Encounter",
-      "entityID": "encounter-123",
-      /* ... other FHIR data */
-    }
+    "resourceType": "Encounter",
+    "reviewed": true,
+    "reviewTime": "2024-01-15T10:30:00Z",
+    "subject": { "reference": "Patient/patient-456" },
+    "participant": [...]
   }
 ]
 ```
@@ -221,8 +234,8 @@ For performance and query efficiency, the system denormalizes relationships:
 ## Error Handling
 
 ### Tenant Validation
-- **Missing Header**: `400 Bad Request` - "missing required header: X-Tenant-ID"
-- **Empty Header**: `400 Bad Request` - "tenant ID cannot be empty"
+- **Invalid Tenant**: `400 Bad Request` - "invalid tenant in URL path"
+- **JWT Mismatch**: `403 Forbidden` - "tenant in URL does not match JWT token"
 
 ### Resource Operations
 - **Not Found**: `404 Not Found` - "resource not found"

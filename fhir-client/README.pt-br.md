@@ -11,7 +11,7 @@ O cliente FHIR implementa um **sistema de ingestão de duas fases**:
 
 1. **Ingestão Primária**: Busca e armazena encontros, pacientes e profissionais
 2. **Resolução de Referências**: Sincroniza automaticamente recursos relacionados quando referenciados em encontros
-3. **Flag de Banco Pronto**: Define uma flag global quando a ingestão está completa para coordenação do serviço de API
+3. **Flag de Banco Pronto**: Define uma flag global (`template/ingestion_status`) quando a ingestão está completa para coordenação do serviço de API
 
 ### Princípios de Design
 - **Processamento Concorrente**: Múltiplas goroutines para ingestão paralela de recursos
@@ -57,7 +57,7 @@ Variáveis de ambiente:
 2. **Classificação de Recursos**: Identifica tipos de recursos (Encounter/Patient/Practitioner)
 3. **Armazenamento Primário**: Armazena recursos com campos desnormalizados
 4. **Resolução de Referências**: Busca recursos referenciados ausentes
-5. **Banco Pronto**: Define flag global quando completo
+5. **Banco Pronto**: Define flag global (`template/ingestion_status`) quando completo
 
 ### Estrutura de Documento
 
@@ -188,7 +188,16 @@ type IngestionError struct {
 - Suporte para estratégias de retry
 
 ### 🔧 **Rastreamento de Status de Ingestão**
-**Estado Atual**: Flag simples "dbReady".
+**Estado Atual**: Flag simples `template/ingestion_status` no DefaultScope.
+
+**Implementação Atual**:
+```go
+type IngestionStatus struct {
+    Ready       bool      `json:"ready"`
+    Message     string    `json:"message"`
+    Updated     time.Time `json:"updated"`
+}
+```
 
 **Melhoria Sugerida**:
 ```go

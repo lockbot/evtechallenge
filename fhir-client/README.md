@@ -11,7 +11,7 @@ The FHIR client implements a **two-phase ingestion system**:
 
 1. **Primary Ingestion**: Fetches and stores encounters, patients, and practitioners
 2. **Reference Resolution**: Automatically syncs related resources when referenced in encounters
-3. **Database Ready Flag**: Sets a global flag when ingestion is complete for API service coordination
+3. **Database Ready Flag**: Sets a global flag (`template/ingestion_status`) when ingestion is complete for API service coordination
 
 ### Design Principles
 - **Concurrent Processing**: Multiple goroutines for parallel resource ingestion
@@ -57,7 +57,7 @@ Environment variables:
 2. **Resource Classification**: Identifies resource types (Encounter/Patient/Practitioner)
 3. **Primary Storage**: Stores resources with denormalized fields
 4. **Reference Resolution**: Fetches missing referenced resources
-5. **Database Ready**: Sets global flag when complete
+5. **Database Ready**: Sets global flag (`template/ingestion_status`) when complete
 
 ### Document Structure
 
@@ -188,7 +188,16 @@ type IngestionError struct {
 - Support for retry strategies
 
 ### 🔧 **Ingestion Status Tracking**
-**Current State**: Simple "dbReady" flag.
+**Current State**: Simple `template/ingestion_status` flag in DefaultScope.
+
+**Current Implementation**:
+```go
+type IngestionStatus struct {
+    Ready       bool      `json:"ready"`
+    Message     string    `json:"message"`
+    Updated     time.Time `json:"updated"`
+}
+```
 
 **Suggested Enhancement**:
 ```go

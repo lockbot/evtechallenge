@@ -14,7 +14,7 @@ This platform consists of **two microservices** working together to provide a co
 - **API REST** (`api-rest/`): Multi-tenant REST API for data access and review management
 
 ### Infrastructure
-- **Couchbase**: Multi-tenant document database with N1QL support
+- **Couchbase**: Multi-tenant document database with logical isolation via scopes and collections
 - **Elasticsearch**: Centralized logging with structured JSON logs
 - **Prometheus**: Metrics collection and monitoring
 - **Grafana**: Visualization and dashboards
@@ -182,18 +182,22 @@ All tenant-based endpoints require JWT authentication via `Authorization: Bearer
 - Operational complexity for cluster management
 
 #### **Multi-Tenant Design**
-**Decision**: Implement tenant isolation through separate review documents.
+**Decision**: Implement tenant isolation through Couchbase scopes and collections with automatic scalability.
 
 **Rationale**:
-- **Logical Isolation**: Each tenant's review state is completely separate
-- **Shared Data**: FHIR resources are shared (cost-effective)
-- **Scalability**: Easy to add new tenants without schema changes
-- **Security**: Clear data boundaries between tenants
+- **Logical Isolation**: Each tenant has completely separate data in their own scope
+- **Automatic Scalability**: New tenants are created automatically on first access
+- **Performance**: Direct queries without tenant filters, leveraging native indexes
+- **Security**: Physical data separation prevents cross-tenant access
+- **Cost-Effective**: Data is copied from DefaultScope only when needed
 
 **Implementation**:
-- Tenant identification via JWT token and URL path validation
-- Review documents stored as `Review/{tenantID}` with separate maps for each resource type
-- All API endpoints require JWT authentication with tenant validation
+- **Tenant Scopes**: Each tenant gets their own scope (e.g., `tenant1`, `tenant2`)
+- **Collections**: Each scope contains `encounters`, `patients`, `practitioners`, and `defaulty` collections
+- **On-Demand Creation**: Scopes and collections are created automatically on first tenant access
+- **Data Copying**: FHIR data is copied from DefaultScope to tenant scope during creation
+- **Review Integration**: Review fields (`reviewed`, `reviewTime`) are embedded directly in FHIR documents
+- **Ingestion Status**: System tracks ingestion status with `template/ingestion_status` and `tenant/ingestion_status` flags
 
 ### Data Modeling Decisions
 
@@ -208,6 +212,8 @@ All tenant-based endpoints require JWT authentication via `Authorization: Bearer
   "docId": "Encounter/encounter-123",
   "subjectPatientId": "patient-456",
   "practitionerIds": ["practitioner-789"],
+  "reviewed": true,
+  "reviewTime": "2024-01-15T10:30:00Z",
   "subject": { "reference": "Patient/patient-456" },
   "participant": [...]
 }
@@ -218,6 +224,7 @@ All tenant-based endpoints require JWT authentication via `Authorization: Bearer
 - Direct access to related IDs
 - Maintains original FHIR structure
 - Supports both key-value and N1QL access
+- Review fields integrated directly into FHIR documents
 
 #### **Reference Resolution Strategy**
 **Decision**: Automatic resolution of FHIR references with graceful failure handling.

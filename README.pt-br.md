@@ -14,7 +14,7 @@ Esta plataforma consiste em **dois microsserviços** trabalhando juntos para for
 - **API REST** (`api-rest/`): API REST multi-tenant para acesso a dados e gerenciamento de revisões
 
 ### Infraestrutura
-- **Couchbase**: Banco de dados de documentos multi-tenant com suporte N1QL
+- **Couchbase**: Banco de dados de documentos multi-tenant com isolamento lógico via scopes e collections
 - **Elasticsearch**: Logs centralizados com logs JSON estruturados
 - **Prometheus**: Coleta de métricas e monitoramento
 - **Grafana**: Visualização e dashboards
@@ -182,18 +182,22 @@ Todos os endpoints baseados em tenant requerem autenticação JWT via header `Au
 - Complexidade operacional para gerenciamento de cluster
 
 #### **Design Multi-Tenant**
-**Decisão**: Implementar isolamento de tenant através de documentos de revisão separados.
+**Decisão**: Implementar isolamento de tenant através de scopes e collections do Couchbase com escalabilidade automática.
 
 **Justificativa**:
-- **Isolamento Lógico**: Estado de revisão de cada tenant é completamente separado
-- **Dados Compartilhados**: Recursos FHIR são compartilhados (custo-efetivo)
-- **Escalabilidade**: Fácil adicionar novos tenants sem mudanças de schema
-- **Segurança**: Limites claros de dados entre tenants
+- **Isolamento Lógico**: Cada tenant possui dados completamente separados em seu próprio scope
+- **Escalabilidade Automática**: Novos tenants são criados automaticamente no primeiro acesso
+- **Performance**: Consultas diretas sem filtros de tenant, aproveitando índices nativos
+- **Segurança**: Separação física de dados previne acesso entre tenants
+- **Custo-Efetivo**: Dados são copiados do DefaultScope apenas quando necessário
 
 **Implementação**:
-- Identificação de tenant via token JWT e validação do caminho da URL
-- Documentos de revisão armazenados como `Review/{tenantID}` com mapas separados para cada tipo de recurso
-- Todos os endpoints da API requerem autenticação JWT com validação de tenant
+- **Scopes de Tenant**: Cada tenant recebe seu próprio scope (ex: `tenant1`, `tenant2`)
+- **Collections**: Cada scope contém collections para `encounters`, `patients`, `practitioners` e `defaulty`
+- **Criação Sob Demanda**: Scopes e collections são criados automaticamente no primeiro acesso do tenant
+- **Cópia de Dados**: Dados FHIR são copiados do DefaultScope para o scope do tenant durante a criação
+- **Integração de Revisão**: Campos de revisão (`reviewed`, `reviewTime`) são incorporados diretamente nos documentos FHIR
+- **Status de Ingestão**: Sistema rastreia status de ingestão com flags `template/ingestion_status` e `tenant/ingestion_status`
 
 ### Decisões de Modelagem de Dados
 
@@ -208,6 +212,8 @@ Todos os endpoints baseados em tenant requerem autenticação JWT via header `Au
   "docId": "Encounter/encounter-123",
   "subjectPatientId": "patient-456",
   "practitionerIds": ["practitioner-789"],
+  "reviewed": true,
+  "reviewTime": "2024-01-15T10:30:00Z",
   "subject": { "reference": "Patient/patient-456" },
   "participant": [...]
 }
@@ -218,6 +224,7 @@ Todos os endpoints baseados em tenant requerem autenticação JWT via header `Au
 - Acesso direto a IDs relacionados
 - Mantém estrutura FHIR original
 - Suporta acesso tanto chave-valor quanto N1QL
+- Campos de revisão integrados diretamente nos documentos FHIR
 
 #### **Estratégia de Resolução de Referências**
 **Decisão**: Resolução automática de referências FHIR com tratamento gracioso de falhas.

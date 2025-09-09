@@ -7,12 +7,14 @@ Este serviço expõe uma API REST multi-tenant para acesso a dados clínicos e g
 
 ## Visão Geral da Arquitetura
 
-O serviço de API implementa uma **arquitetura multi-tenant** com isolamento lógico através de documentos de revisão específicos por tenant. O estado de revisão de cada tenant é armazenado separadamente, garantindo isolamento completo de dados entre clientes.
+O serviço de API implementa uma **arquitetura multi-tenant** com isolamento lógico completo através de scopes e collections do Couchbase. Cada tenant possui seu próprio scope dedicado com collections separadas, garantindo isolamento completo de dados e escalabilidade automática.
 
 ### Design Multi-Tenant
-- **Identificação de Tenant**: Todas as requisições requerem header `X-Tenant-ID`
-- **Isolamento de Revisões**: Revisões são armazenadas como documentos separados (`Review/{tenantID}`)
-- **Acesso a Dados**: Recursos FHIR são compartilhados, mas status de revisão é específico por tenant
+- **Scopes de Tenant**: Cada tenant recebe seu próprio scope do Couchbase (ex: `tenant1`, `tenant2`)
+- **Criação Automática**: Scopes e collections são criados automaticamente no primeiro acesso do tenant
+- **Isolamento de Dados**: Separação física completa dos dados do tenant
+- **Integração de Revisão**: Campos de revisão (`reviewed`, `reviewTime`) são incorporados diretamente nos documentos FHIR
+- **Performance**: Consultas diretas sem filtros de tenant, aproveitando índices nativos do Couchbase
 
 ## Início Rápido
 
@@ -52,19 +54,19 @@ Variáveis de ambiente:
 
 ### Endpoints de Recursos FHIR
 
-Todos os endpoints requerem header `X-Tenant-ID` e retornam status de revisão para o tenant solicitante.
+Todos os endpoints usam roteamento baseado em tenant (`/api/{tenant}/...`) e retornam recursos FHIR com status de revisão incorporado.
 
 #### Encontros
-- `GET /encounters` - Listar todos os encontros com status de revisão
-- `GET /encounters/{id}` - Obter encontro específico com status de revisão
+- `GET /api/{tenant}/encounters` - Listar todos os encontros com status de revisão incorporado
+- `GET /api/{tenant}/encounters/{id}` - Obter encontro específico com status de revisão incorporado
 
 #### Pacientes
-- `GET /patients` - Listar todos os pacientes com status de revisão
-- `GET /patients/{id}` - Obter paciente específico com status de revisão
+- `GET /api/{tenant}/patients` - Listar todos os pacientes com status de revisão incorporado
+- `GET /api/{tenant}/patients/{id}` - Obter paciente específico com status de revisão incorporado
 
 #### Profissionais
-- `GET /practitioners` - Listar todos os profissionais com status de revisão
-- `GET /practitioners/{id}` - Obter profissional específico com status de revisão
+- `GET /api/{tenant}/practitioners` - Listar todos os profissionais com status de revisão incorporado
+- `GET /api/{tenant}/practitioners/{id}` - Obter profissional específico com status de revisão incorporado
 
 ### Paginação
 
@@ -75,14 +77,14 @@ Todos os endpoints de lista suportam paginação usando parâmetros de query:
 
 **Exemplo:**
 ```bash
-# Obter primeiros 50 encontros
-GET /encounters?count=50&page=1
+# Obter primeiros 50 encontros para tenant1
+GET /api/tenant1/encounters?count=50&page=1
 
-# Obter segunda página de 25 pacientes
-GET /patients?count=25&page=2
+# Obter segunda página de 25 pacientes para tenant1
+GET /api/tenant1/patients?count=25&page=2
 
-# Obter primeiros 100 profissionais (padrão)
-GET /practitioners
+# Obter primeiros 100 profissionais para tenant1 (padrão)
+GET /api/tenant1/practitioners
 ```
 
 **Formato de Resposta Paginada:**
@@ -107,33 +109,43 @@ GET /practitioners
 **Nota:** O Couchbase tem um limite padrão de 100 documentos por consulta. Use paginação para acessar conjuntos de dados maiores de forma eficiente.
 
 ### Gerenciamento de Revisões
-- `POST /review-request` - Marcar um recurso para revisão
+- `POST /api/{tenant}/review-request` - Marcar um recurso para revisão
 
-## Sistema de Revisão Multi-Tenant
+## Arquitetura Multi-Tenant
 
-### Estrutura do Documento de Revisão
-Cada tenant tem um documento de revisão com mapas separados para diferentes tipos de recursos:
+### Estrutura de Scope do Tenant
+Cada tenant possui seu próprio scope do Couchbase com collections dedicadas:
+
+**DefaultScope** (Dados Template):
+- `encounters`: Dados FHIR originais de encontros
+- `patients`: Dados FHIR originais de pacientes  
+- `practitioners`: Dados FHIR originais de profissionais
+- `_default`: Status de ingestão do sistema (`template/ingestion_status`)
+
+**Scopes de Tenant** (ex: `tenant1`, `tenant2`):
+- `encounters`: Dados de encontros específicos do tenant com campos de revisão incorporados
+- `patients`: Dados de pacientes específicos do tenant com campos de revisão incorporados
+- `practitioners`: Dados de profissionais específicos do tenant com campos de revisão incorporados
+- `defaulty`: Status de ingestão do tenant (`tenant/ingestion_status`)
+
+### Integração de Revisão
+Campos de revisão são incorporados diretamente nos documentos FHIR:
 
 ```json
 {
-  "tenantId": "tenant-abc",
-  "updated": "2024-01-15T10:30:00Z",
-  "encounters": {
-    "Encounter/456": { "reviewRequested": true, "reviewTime": "..." }
-  },
-  "patients": {
-    "Patient/123": { "reviewRequested": true, "reviewTime": "..." }
-  },
-  "practitioners": {
-    "Practitioner/789": { "reviewRequested": true, "reviewTime": "..." }
-  }
+  "id": "encounter-123",
+  "resourceType": "Encounter",
+  "reviewed": true,
+  "reviewTime": "2024-01-15T10:30:00Z",
+  "subject": { "reference": "Patient/patient-456" },
+  "participant": [...]
 }
 ```
 
 ### Endpoint de Requisição de Revisão
 ```bash
-POST /review-request
-Headers: X-Tenant-ID: your-tenant-id
+POST /api/tenant1/review-request
+Headers: Authorization: Bearer <jwt-token>
 Body: {
   "entity": "encounter",
   "id": "encounter-123"
@@ -141,14 +153,17 @@ Body: {
 ```
 
 ### Formato de Resposta
-Todos os endpoints de recursos retornam status de revisão:
+Todos os endpoints de recursos retornam recursos FHIR com status de revisão incorporado:
 
 **Recurso Individual:**
 ```json
 {
+  "id": "encounter-123",
+  "resourceType": "Encounter",
   "reviewed": true,
   "reviewTime": "2024-01-15T10:30:00Z",
-  "data": { /* dados do recurso FHIR */ }
+  "subject": { "reference": "Patient/patient-456" },
+  "participant": [...]
 }
 ```
 
@@ -157,13 +172,11 @@ Todos os endpoints de recursos retornam status de revisão:
 [
   {
     "id": "encounter-123",
-    "resource": {
-      "reviewed": true,
-      "reviewTime": "2024-01-15T10:30:00Z",
-      "entityType": "Encounter",
-      "entityID": "encounter-123",
-      /* ... outros dados FHIR */
-    }
+    "resourceType": "Encounter",
+    "reviewed": true,
+    "reviewTime": "2024-01-15T10:30:00Z",
+    "subject": { "reference": "Patient/patient-456" },
+    "participant": [...]
   }
 ]
 ```
@@ -221,8 +234,8 @@ Para performance e eficiência de consulta, o sistema desnormaliza relacionament
 ## Tratamento de Erros
 
 ### Validação de Tenant
-- **Header Ausente**: `400 Bad Request` - "missing required header: X-Tenant-ID"
-- **Header Vazio**: `400 Bad Request` - "tenant ID cannot be empty"
+- **Tenant Inválido**: `400 Bad Request` - "invalid tenant in URL path"
+- **JWT Incompatível**: `403 Forbidden` - "tenant in URL does not match JWT token"
 
 ### Operações de Recursos
 - **Não Encontrado**: `404 Not Found` - "resource not found"
