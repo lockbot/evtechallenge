@@ -10,7 +10,7 @@ Ao projetar a persistência de dados para a plataforma de dados clínicos EVT Ch
 
 ## Decisão
 
-Decidimos utilizar Couchbase como banco de dados primário para persistência dos dados FHIR e informações de revisão multi-tenant.
+Decidimos utilizar Couchbase como banco de dados primário para persistência dos dados FHIR com isolamento multi-tenant através de scopes e collections.
 
 ## Justificativa
 
@@ -21,7 +21,7 @@ A decisão de usar Couchbase foi baseada nas seguintes razões:
 - **Escalabilidade**: Oferece escalabilidade horizontal com sharding automático, essencial para crescimento futuro
 - **Multi-Modelo**: Suporta operações chave-valor, documento e consultas N1QL, oferecendo flexibilidade de acesso aos dados
 - **Performance**: Cache em memória com persistência em disco, otimizando performance de leitura
-- **Multi-Tenancy**: Suporte nativo a isolamento de dados através de scopes e collections
+- **Multi-Tenancy**: Isolamento lógico completo através de scopes por tenant e collections por tipo de recurso
 - **Consistência Eventual**: Adequado para dados clínicos onde consistência eventual é aceitável
 
 ## Alternativas Consideradas
@@ -30,6 +30,38 @@ Outras alternativas consideradas incluíram:
 
 - **MongoDB**: Banco NoSQL similar, mas Couchbase oferece melhor performance de cache
 - **PostgreSQL**: Banco relacional robusto, mas requer modelagem de schema complexa para dados FHIR variáveis
+
+## Arquitetura de Isolamento Multi-Tenant
+
+### Estrutura de Scopes e Collections
+
+**DefaultScope**: Contém os dados FHIR originais ingeridos pelo fhir-client
+- `encounters`: Recursos FHIR de encontros
+- `patients`: Recursos FHIR de pacientes  
+- `practitioners`: Recursos FHIR de profissionais
+- `_default`: Status de ingestão do sistema (`template/ingestion_status`)
+
+**Tenant Scopes**: Cada tenant possui seu próprio scope (ex: `tenant1`, `tenant2`)
+- `encounters`: Cópia dos dados de encontros do DefaultScope
+- `patients`: Cópia dos dados de pacientes do DefaultScope
+- `practitioners`: Cópia dos dados de profissionais do DefaultScope
+- `defaulty`: Status de ingestão específico do tenant (`tenant/ingestion_status`)
+
+### Benefícios da Arquitetura
+
+- **Isolamento Lógico**: Cada tenant possui dados completamente separados
+- **Escalabilidade Automática**: Novos tenants são criados automaticamente no primeiro acesso
+- **Cópia Sob Demanda**: Dados são copiados do DefaultScope apenas quando necessário
+- **Revisões Integradas**: Campos de revisão (`reviewed`, `reviewTime`) são adicionados diretamente aos documentos FHIR
+- **Performance**: Consultas diretas sem filtros de tenant, aproveitando índices nativos
+
+### Processo de Criação de Tenant
+
+1. **Primeiro Acesso**: API detecta que scope do tenant não existe
+2. **Criação Automática**: Scope e collections são criados automaticamente
+3. **Cópia de Dados**: Dados são copiados do DefaultScope para o tenant scope
+4. **Status de Ingestão**: Flag `tenant/ingestion_status` é definida como `true` quando cópia completa
+5. **Próximos Acessos**: API verifica status e serve dados diretamente do tenant scope
 
 ## Consequências
 
@@ -40,6 +72,7 @@ A escolha do Couchbase traz consigo as seguintes consequências:
 - **Consistência**: Menos garantias ACID comparado a bancos relacionais tradicionais
 - **Custo**: Licenciamento pode ser mais caro para versão enterprise, ou o DBaaS Couchbase Capella
 - **Dependência**: Maior dependência de uma tecnologia específica, dificuldade de migração
+- **Isolamento de Dados**: Cada tenant possui dados completamente separados, garantindo segurança e compliance
 
 ## Referências
 

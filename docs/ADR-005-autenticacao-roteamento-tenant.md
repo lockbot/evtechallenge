@@ -79,13 +79,30 @@ A escolha do roteamento baseado em tenant traz consigo as seguintes consequênci
 
 ## Integração com Couchbase
 
-**Importante**: Esta implementação NÃO utiliza scopes/collections do Couchbase para isolamento de tenant. O isolamento é feito a nível de aplicação através de:
+**Arquitetura de Isolamento**: Esta implementação utiliza scopes e collections do Couchbase para isolamento completo de tenant:
 
-- **Filtros de Consulta**: Adicionar `WHERE tenantId = ?` nas consultas N1QL
-- **Chaves de Documento**: Prefixar chaves com tenant ID quando necessário
-- **Validação de Acesso**: Verificar permissões antes de acessar dados
+### Estrutura de Isolamento
 
-Esta abordagem é mais simples e adequada para o caso de uso atual, onde não há necessidade de isolamento físico completo entre tenants.
+- **Scopes por Tenant**: Cada tenant possui seu próprio scope (ex: `tenant1`, `tenant2`)
+- **Collections por Tipo**: Cada scope contém collections para `encounters`, `patients`, `practitioners` e `defaulty`
+- **Criação Automática**: Scopes e collections são criados automaticamente no primeiro acesso do tenant
+- **Cópia de Dados**: Dados são copiados do DefaultScope para o tenant scope sob demanda
+
+### Benefícios da Arquitetura
+
+- **Isolamento Físico**: Dados de cada tenant são completamente separados
+- **Performance**: Consultas diretas sem filtros de tenant, aproveitando índices nativos
+- **Escalabilidade**: Novos tenants são criados automaticamente sem impacto em tenants existentes
+- **Segurança**: Impossível acesso acidental a dados de outros tenants
+- **Compliance**: Isolamento completo atende requisitos de compliance e auditoria
+
+### Processo de Acesso
+
+1. **Validação JWT**: Token é validado e tenant extraído
+2. **Verificação de Scope**: API verifica se scope do tenant existe
+3. **Criação Automática**: Se não existe, scope e collections são criados
+4. **Cópia de Dados**: Dados são copiados do DefaultScope (apenas na primeira vez)
+5. **Acesso Direto**: Consultas são feitas diretamente no tenant scope
 
 ## Referências
 
