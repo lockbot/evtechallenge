@@ -2,7 +2,9 @@ package dal
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
@@ -22,8 +24,11 @@ type IngestionStatus struct {
 	Message     string    `json:"message"`
 }
 
-// IngestionStatusKey is the document key for ingestion status
-const IngestionStatusKey = "_system/ingestion_status"
+// TemplateIngestionStatusKey is the document key for system-wide FHIR ingestion status
+const TemplateIngestionStatusKey = "template/ingestion_status"
+
+// TenantIngestionStatusKey is the document key for tenant-specific ingestion status
+const TenantIngestionStatusKey = "tenant/ingestion_status"
 
 // NewIngestionStatusModel creates a new ingestion status model
 func NewIngestionStatusModel(conn *Connection) *IngestionStatusModel {
@@ -36,10 +41,13 @@ func NewIngestionStatusModel(conn *Connection) *IngestionStatusModel {
 func (ism *IngestionStatusModel) GetDefaultScopeIngestionStatus(ctx context.Context) (*IngestionStatus, error) {
 	collection := ism.conn.GetBucket().DefaultCollection()
 
-	result, err := collection.Get(IngestionStatusKey, &gocb.GetOptions{})
+	result, err := collection.Get(TemplateIngestionStatusKey, &gocb.GetOptions{})
 	if err != nil {
-		// Check if it's a key not found error (simplified check)
-		if err.Error() == "document not found" {
+		// Check if document doesn't exist (multiple ways to check this)
+		if errors.Is(err, gocb.ErrDocumentNotFound) ||
+			strings.Contains(err.Error(), "document not found") ||
+			strings.Contains(err.Error(), "Not Found") ||
+			strings.Contains(err.Error(), "KEY_ENOENT") {
 			// Ingestion status document doesn't exist yet
 			return &IngestionStatus{Ready: false}, nil
 		}
@@ -66,12 +74,15 @@ func (ism *IngestionStatusModel) IsDefaultScopeIngestionReady(ctx context.Contex
 
 // GetTenantScopeIngestionStatus retrieves ingestion status from tenant scope
 func (ism *IngestionStatusModel) GetTenantScopeIngestionStatus(ctx context.Context, tenantScope string) (*IngestionStatus, error) {
-	collection := ism.conn.GetBucket().Scope(tenantScope).Collection("_default")
+	collection := ism.conn.GetBucket().Scope(tenantScope).Collection("defaulty")
 
-	result, err := collection.Get(IngestionStatusKey, &gocb.GetOptions{})
+	result, err := collection.Get(TenantIngestionStatusKey, &gocb.GetOptions{})
 	if err != nil {
-		// Check if it's a key not found error (simplified check)
-		if err.Error() == "document not found" {
+		// Check if document doesn't exist (multiple ways to check this)
+		if errors.Is(err, gocb.ErrDocumentNotFound) ||
+			strings.Contains(err.Error(), "document not found") ||
+			strings.Contains(err.Error(), "Not Found") ||
+			strings.Contains(err.Error(), "KEY_ENOENT") {
 			// Ingestion status document doesn't exist yet
 			return &IngestionStatus{Ready: false}, nil
 		}
@@ -98,9 +109,9 @@ func (ism *IngestionStatusModel) IsTenantScopeIngestionReady(ctx context.Context
 
 // SetTenantScopeIngestionStatus sets the ingestion status for a specific tenant scope
 func (ism *IngestionStatusModel) SetTenantScopeIngestionStatus(ctx context.Context, tenantScope string, status *IngestionStatus) error {
-	collection := ism.conn.GetBucket().Scope(tenantScope).Collection("_default")
+	collection := ism.conn.GetBucket().Scope(tenantScope).Collection("defaulty")
 
-	_, err := collection.Upsert(IngestionStatusKey, status, &gocb.UpsertOptions{})
+	_, err := collection.Upsert(TenantIngestionStatusKey, status, &gocb.UpsertOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to set tenant scope ingestion status for %s: %w", tenantScope, err)
 	}
