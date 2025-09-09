@@ -92,6 +92,9 @@ func (rm *ResourceModel) UpsertResource(ctx context.Context, docID string, data 
 		log.Warn().Err(err).Msg("Failed to create collections and indexes, continuing with upsert")
 	}
 
+	// Add reviewed field to all resources during FHIR ingestion
+	data["reviewed"] = false
+
 	// Get the appropriate collection based on resource type
 	collection, err := rm.getCollectionForResource(docID)
 	if err != nil {

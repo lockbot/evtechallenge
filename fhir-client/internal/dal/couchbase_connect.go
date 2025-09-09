@@ -143,7 +143,7 @@ func getConnOrGenConn() (*Connection, error) {
 	bucket := cluster.Bucket(bucketName)
 
 	// Wait for the bucket to be ready for KV and Query operations
-	err = bucket.WaitUntilReady(90*time.Second, &gocb.WaitUntilReadyOptions{
+	err = bucket.WaitUntilReady(15*time.Second, &gocb.WaitUntilReadyOptions{
 		Context:      context.Background(),
 		ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery},
 	})
