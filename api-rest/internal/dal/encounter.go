@@ -18,6 +18,12 @@ func NewEncounterModel(resourceModel *ResourceModel) *EncounterModel {
 	return &EncounterModel{resourceModel: resourceModel}
 }
 
+// NewEncounterModelWithTenant creates a new encounter model instance for a specific tenant
+func NewEncounterModelWithTenant(conn *Connection, tenantScope string) *EncounterModel {
+	resourceModel := NewResourceModelWithTenant(conn, tenantScope)
+	return &EncounterModel{resourceModel: resourceModel}
+}
+
 // GetByID retrieves an encounter by ID
 func (em *EncounterModel) GetByID(ctx context.Context, id string) (map[string]interface{}, error) {
 	log.Debug().

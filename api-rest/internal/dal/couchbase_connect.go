@@ -1,6 +1,7 @@
 package dal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -74,7 +75,8 @@ func getConnOrGenConn() (*Connection, error) {
 	}
 
 	bucket := cluster.Bucket(bucketName)
-	err = bucket.WaitUntilReady(30*time.Second, &gocb.WaitUntilReadyOptions{
+	err = bucket.WaitUntilReady(15*time.Second, &gocb.WaitUntilReadyOptions{
+		Context:      context.Background(),
 		ServiceTypes: []gocb.ServiceType{gocb.ServiceTypeKeyValue, gocb.ServiceTypeQuery},
 	})
 	if err != nil {
@@ -111,4 +113,24 @@ func (c *Connection) GetCluster() *gocb.Cluster {
 // GetBucketName returns the Couchbase bucket name
 func (c *Connection) GetBucketName() string {
 	return c.bucketName
+}
+
+// GetScope returns a specific scope from the bucket
+func (c *Connection) GetScope(scopeName string) *gocb.Scope {
+	return c.bucket.Scope(scopeName)
+}
+
+// GetDefaultScope returns the default scope
+func (c *Connection) GetDefaultScope() *gocb.Scope {
+	return c.bucket.Scope("_default")
+}
+
+// GetCollection returns a specific collection from a scope
+func (c *Connection) GetCollection(scopeName, collectionName string) *gocb.Collection {
+	return c.bucket.Scope(scopeName).Collection(collectionName)
+}
+
+// GetDefaultCollection returns the default collection from the default scope
+func (c *Connection) GetDefaultCollection() *gocb.Collection {
+	return c.bucket.DefaultCollection()
 }

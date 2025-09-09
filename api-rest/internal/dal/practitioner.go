@@ -18,6 +18,12 @@ func NewPractitionerModel(resourceModel *ResourceModel) *PractitionerModel {
 	return &PractitionerModel{resourceModel: resourceModel}
 }
 
+// NewPractitionerModelWithTenant creates a new practitioner model instance for a specific tenant
+func NewPractitionerModelWithTenant(conn *Connection, tenantScope string) *PractitionerModel {
+	resourceModel := NewResourceModelWithTenant(conn, tenantScope)
+	return &PractitionerModel{resourceModel: resourceModel}
+}
+
 // GetByID retrieves a practitioner by ID
 func (prm *PractitionerModel) GetByID(ctx context.Context, id string) (map[string]interface{}, error) {
 	log.Debug().

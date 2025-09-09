@@ -3,7 +3,6 @@ package dal
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,15 +10,49 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// executeQueryWithContext executes a N1QL query with proper tenant isolation
+// Tenant isolation is handled by explicit bucket.scope.collection paths in queries
+func executeQueryWithContext(ctx context.Context, conn *Connection, tenantScope, query string) (*gocb.QueryResult, error) {
+	// Execute the query directly - tenant isolation is handled by explicit scope/collection paths
+	return conn.GetCluster().Query(query, &gocb.QueryOptions{Context: ctx})
+}
+
 // ResourceModel represents the database model for FHIR resources
 type ResourceModel struct {
-	conn *Connection
+	conn        *Connection
+	tenantScope string
 }
 
 // NewResourceModel creates a new resource model
 func NewResourceModel(conn *Connection) *ResourceModel {
 	return &ResourceModel{
-		conn: conn,
+		conn:        conn,
+		tenantScope: "_default", // Default to default scope
+	}
+}
+
+// NewResourceModelWithTenant creates a new resource model for a specific tenant
+func NewResourceModelWithTenant(conn *Connection, tenantScope string) *ResourceModel {
+	return &ResourceModel{
+		conn:        conn,
+		tenantScope: tenantScope,
+	}
+}
+
+// getCollectionForResource returns the appropriate collection for a resource type
+func (rm *ResourceModel) getCollectionForResource(resourceType string) *gocb.Collection {
+	scope := rm.conn.GetBucket().Scope(rm.tenantScope)
+
+	switch resourceType {
+	case "Encounter":
+		return scope.Collection("encounters")
+	case "Patient":
+		return scope.Collection("patients")
+	case "Practitioner":
+		return scope.Collection("practitioners")
+	default:
+		// Fallback to default collection
+		return scope.Collection("defaulty")
 	}
 }
 
@@ -43,14 +76,20 @@ type PaginatedResponse struct {
 
 // GetResource retrieves a FHIR resource from Couchbase
 func (rm *ResourceModel) GetResource(ctx context.Context, docID string) (map[string]interface{}, error) {
+	// Extract resource type from docID (e.g., "Encounter/123" -> "Encounter")
+	resourceType := strings.Split(docID, "/")[0]
+	collection := rm.getCollectionForResource(resourceType)
+
 	start := time.Now()
-	result, err := rm.conn.GetBucket().DefaultCollection().Get(docID, &gocb.GetOptions{Context: ctx})
+	result, err := collection.Get(docID, &gocb.GetOptions{Context: ctx})
 	duration := time.Since(start)
 
 	if err != nil {
 		log.Warn().
 			Err(err).
 			Str("doc_id", docID).
+			Str("tenant_scope", rm.tenantScope).
+			Str("collection", resourceType).
 			Msg("Resource not found")
 		return nil, fmt.Errorf("resource not found: %w", err)
 	}
@@ -67,6 +106,8 @@ func (rm *ResourceModel) GetResource(ctx context.Context, docID string) (map[str
 
 	log.Debug().
 		Str("doc_id", docID).
+		Str("tenant_scope", rm.tenantScope).
+		Str("collection", resourceType).
 		Dur("duration", duration).
 		Msg("Successfully retrieved resource")
 	return data, nil
@@ -91,14 +132,12 @@ func (rm *ResourceModel) ListResources(ctx context.Context, resourceType string,
 		Int("offset", offset).
 		Msg("Querying resources")
 
-	query := "SELECT META(d).id AS id, d AS resource FROM `" + rm.conn.GetBucketName() +
-		"` AS d WHERE d.`resourceType` = $rt ORDER BY META(d).id LIMIT " + strconv.Itoa(params.Count) +
-		" OFFSET " + strconv.Itoa(offset)
+	// Use scoped collection query instead of bucket-wide query
+	collectionName := strings.ToLower(resourceType) + "s" // encounters, patients, practitioners
+	query := fmt.Sprintf("SELECT META(d).id AS id, d AS resource FROM `%s`.`%s`.`%s` AS d ORDER BY META(d).id LIMIT %d OFFSET %d",
+		rm.conn.GetBucketName(), rm.tenantScope, collectionName, params.Count, offset)
 
-	rows, err := rm.conn.GetCluster().Query(query, &gocb.QueryOptions{
-		Context:         ctx,
-		NamedParameters: map[string]interface{}{"rt": resourceType},
-	})
+	rows, err := executeQueryWithContext(ctx, rm.conn, rm.tenantScope, query)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -142,20 +181,28 @@ func (rm *ResourceModel) ListResources(ctx context.Context, resourceType string,
 
 // UpsertResource upserts a FHIR resource to Couchbase
 func (rm *ResourceModel) UpsertResource(ctx context.Context, docID string, data map[string]interface{}) error {
+	// Extract resource type from docID (e.g., "Encounter/123" -> "Encounter")
+	resourceType := strings.Split(docID, "/")[0]
+	collection := rm.getCollectionForResource(resourceType)
+
 	start := time.Now()
-	_, err := rm.conn.GetBucket().DefaultCollection().Upsert(docID, data, &gocb.UpsertOptions{Context: ctx})
+	_, err := collection.Upsert(docID, data, &gocb.UpsertOptions{Context: ctx})
 	duration := time.Since(start)
 
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("doc_id", docID).
+			Str("tenant_scope", rm.tenantScope).
+			Str("collection", resourceType).
 			Msg("Failed to upsert resource")
 		return fmt.Errorf("failed to upsert resource %s: %w", docID, err)
 	}
 
 	log.Debug().
 		Str("doc_id", docID).
+		Str("tenant_scope", rm.tenantScope).
+		Str("collection", resourceType).
 		Dur("duration", duration).
 		Msg("Successfully upserted resource")
 	return nil
@@ -163,8 +210,12 @@ func (rm *ResourceModel) UpsertResource(ctx context.Context, docID string, data 
 
 // ResourceExists checks if a resource exists in Couchbase
 func (rm *ResourceModel) ResourceExists(ctx context.Context, docID string) (bool, error) {
+	// Extract resource type from docID (e.g., "Encounter/123" -> "Encounter")
+	resourceType := strings.Split(docID, "/")[0]
+	collection := rm.getCollectionForResource(resourceType)
+
 	start := time.Now()
-	_, err := rm.conn.GetBucket().DefaultCollection().Get(docID, &gocb.GetOptions{Context: ctx})
+	_, err := collection.Get(docID, &gocb.GetOptions{Context: ctx})
 	duration := time.Since(start)
 
 	if err != nil {
@@ -177,6 +228,8 @@ func (rm *ResourceModel) ResourceExists(ctx context.Context, docID string) (bool
 
 	log.Debug().
 		Str("doc_id", docID).
+		Str("tenant_scope", rm.tenantScope).
+		Str("collection", resourceType).
 		Dur("duration", duration).
 		Msg("Resource exists")
 	return true, nil

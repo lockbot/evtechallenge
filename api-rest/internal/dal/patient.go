@@ -18,6 +18,12 @@ func NewPatientModel(resourceModel *ResourceModel) *PatientModel {
 	return &PatientModel{resourceModel: resourceModel}
 }
 
+// NewPatientModelWithTenant creates a new patient model instance for a specific tenant
+func NewPatientModelWithTenant(conn *Connection, tenantScope string) *PatientModel {
+	resourceModel := NewResourceModelWithTenant(conn, tenantScope)
+	return &PatientModel{resourceModel: resourceModel}
+}
+
 // GetByID retrieves a patient by ID
 func (pm *PatientModel) GetByID(ctx context.Context, id string) (map[string]interface{}, error) {
 	log.Debug().
