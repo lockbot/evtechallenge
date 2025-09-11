@@ -299,10 +299,10 @@ evtechallenge/
 #### Database Connection Failures
 ```bash
 # Check Couchbase status
-docker-compose logs evtechallenge-db
+docker-compose logs couchbase
 
 # Restart database
-docker-compose restart evtechallenge-db
+docker-compose restart couchbase
 ```
 
 #### API Service Unavailable
